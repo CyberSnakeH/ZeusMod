@@ -1,0 +1,45 @@
+# Build outputs
+bin/
+obj/
+x64/
+*.obj
+*.pdb
+*.lib
+*.exp
+*.ilk
+*.iobj
+*.ipdb
+*.tlog/
+*.lastbuildstate
+*.log
+*.user
+
+# Tools & temp
+tools/
+*.zip
+*.pak
+*_temp/
+data_extracted/
+data_original/
+
+# ImGui/MinHook libs (downloaded, not source)
+IcarusInternal/libs/
+IcarusInternal/minhook*/
+IcarusInternal/imgui*/
+
+# Old code
+IcarusTrainer/
+IcarusInjector/ExternalTrainer.*
+IcarusInjector/HotkeyManager.*
+IcarusInjector/Render.*
+
+# IDE
+.vs/
+*.suo
+*.sdf
+*.opensdf
+*.cachefile
+ipch/
+
+# UE4SS
+ue4ss/
