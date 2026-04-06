@@ -42,6 +42,7 @@ jobs:
       - name: Prepare Release
         run: |
           mkdir release
+          mkdir -Force app/bin
 
           # Copy C++ binaries to app/bin
           Get-ChildItem -Recurse -Filter "IcarusInjector.exe" -Path "IcarusInjector" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "app/bin/"
