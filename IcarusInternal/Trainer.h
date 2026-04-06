@@ -148,6 +148,8 @@ private:
     void FindPlayer();
     void RemoveDebuffs();
     void PatchSetHealth(bool enable);
+    void StartPipeServer();
+    static DWORD WINAPI PipeServerThread(LPVOID param);
     void PatchRemoveItem(bool enable);
     void PatchCraftCosts(bool enable);
     void PatchWeight(bool enable);

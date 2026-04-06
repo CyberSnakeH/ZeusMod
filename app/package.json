@@ -1,0 +1,37 @@
+{
+  "name": "zeusmod",
+  "version": "1.0.0",
+  "description": "ZeusMod - Game Trainer Platform",
+  "main": "main.js",
+  "author": "CyberSnake",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.cybersnake.zeusmod",
+    "productName": "ZeusMod",
+    "win": {
+      "target": "portable",
+      "icon": "src/assets/icon.png"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "bin/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/",
+        "to": "bin/",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}

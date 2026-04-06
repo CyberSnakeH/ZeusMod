@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeusMod</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- Custom Title Bar -->
+    <div class="titlebar">
+        <div class="titlebar-drag">
+            <span class="titlebar-icon">&#x26A1;</span>
+            <span class="titlebar-title">ZeusMod</span>
+            <span class="titlebar-version" id="app-version">v1.0.0</span>
+        </div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn" id="btn-min">&#x2500;</button>
+            <button class="titlebar-btn" id="btn-max">&#x25A1;</button>
+            <button class="titlebar-btn titlebar-close" id="btn-close">&#x2715;</button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-label">MY GAMES</span>
+                <span class="sidebar-count" id="game-count">0</span>
+            </div>
+
+            <div class="sidebar-search">
+                <input type="text" class="search-input" id="game-search" placeholder="Search games...">
+            </div>
+
+            <div class="sidebar-games" id="games-list">
+                <div class="loading-games">Scanning Steam...</div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-credit">
+                    <span class="credit-icon">&#x26A1;</span>
+                    Made by <strong>CyberSnake</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- No game selected state -->
+            <div class="empty-state" id="empty-state">
+                <div class="empty-icon">&#x1F3AE;</div>
+                <h2>Select a game</h2>
+                <p>Choose a supported game from your library to get started</p>
+            </div>
+
+            <!-- Game panel (hidden by default) -->
+            <div class="game-panel" id="game-panel" style="display:none;">
+                <!-- Game Header -->
+                <div class="game-header">
+                    <div class="game-header-info">
+                        <h1 class="game-title" id="panel-game-title">Icarus</h1>
+                        <div class="game-header-meta">
+                            <span class="game-badge supported">SUPPORTED</span>
+                            <div class="game-header-status">
+                                <span class="status-dot" id="status-dot"></span>
+                                <span class="status-text" id="status-text">Not Connected</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="play-btn" id="btn-play">
+                        <span class="play-icon">&#x25B6;</span>
+                        <span>ATTACH</span>
+                    </button>
+                </div>
+
+                <!-- Cheats -->
+                <div class="cheats-container">
+                    <div class="cheat-category">
+                        <div class="category-header">
+                            <span class="category-icon">&#x1F6E1;</span>
+                            <span>SURVIVAL</span>
+                        </div>
+                        <div class="cheat-list">
+                            <div class="cheat-row" data-cheat="godmode">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F6E1;&#xFE0F;</span>
+                                    <div><div class="cheat-name">God Mode</div><div class="cheat-desc">Invincible - max health, no debuffs</div></div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-cheat-toggle="godmode"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="cheat-row" data-cheat="stamina">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x26A1;</span>
+                                    <div><div class="cheat-name">Infinite Stamina</div><div class="cheat-desc">Sprint forever</div></div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-cheat-toggle="stamina"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="cheat-row" data-cheat="armor">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F6E1;&#xFE0F;</span>
+                                    <div><div class="cheat-name">Infinite Armor</div><div class="cheat-desc">Armor never breaks</div></div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-cheat-toggle="armor"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="cheat-row" data-cheat="oxygen">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F4A8;</span>
+                                    <div><div class="cheat-name">Infinite Oxygen</div><div class="cheat-desc">Breathe underwater forever</div></div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-cheat-toggle="oxygen"><span class="toggle-slider"></span></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cheat-category">
+                        <div class="category-header">
+                            <span class="category-icon">&#x2728;</span>
+                            <span>RESOURCES</span>
+                        </div>
+                        <div class="cheat-list">
+                            <div class="cheat-row" data-cheat="food">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F356;</span>
+                                    <div><div class="cheat-name">No Hunger / Thirst</div><div class="cheat-desc">Never starve or dehydrate</div></div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-cheat-toggle="food"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="cheat-row" data-cheat="craft">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F528;</span>
+                                    <div><div class="cheat-name">Free Craft</div><div class="cheat-desc">Craft anything without resources</div></div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-cheat-toggle="craft"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="cheat-row" data-cheat="weight">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F392;</span>
+                                    <div><div class="cheat-name">No Weight Limit</div><div class="cheat-desc">Carry unlimited items</div></div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-cheat-toggle="weight"><span class="toggle-slider"></span></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cheat-category">
+                        <div class="category-header">
+                            <span class="category-icon">&#x26A1;</span>
+                            <span>MOVEMENT & WORLD</span>
+                        </div>
+                        <div class="cheat-list">
+                            <div class="cheat-row" data-cheat="speed">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F3C3;</span>
+                                    <div><div class="cheat-name">Speed Hack</div><div class="cheat-desc">Adjustable movement speed</div></div>
+                                </div>
+                                <div class="cheat-controls">
+                                    <button class="speed-btn" id="speed-down">-</button>
+                                    <span class="speed-value" id="speed-value">x2.0</span>
+                                    <button class="speed-btn" id="speed-up">+</button>
+                                    <label class="toggle"><input type="checkbox" data-cheat-toggle="speed"><span class="toggle-slider"></span></label>
+                                </div>
+                            </div>
+                            <div class="cheat-row" data-cheat="time">
+                                <div class="cheat-info">
+                                    <span class="cheat-icon">&#x1F305;</span>
+                                    <div><div class="cheat-name">Time Lock</div><div class="cheat-desc">Lock time of day</div></div>
+                                </div>
+                                <div class="cheat-controls">
+                                    <span class="time-value" id="time-value" title="Click to change">12:00</span>
+                                    <label class="toggle"><input type="checkbox" data-cheat-toggle="time"><span class="toggle-slider"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unsupported game state -->
+            <div class="unsupported-state" id="unsupported-state" style="display:none;">
+                <div class="empty-icon">&#x1F6A7;</div>
+                <h2 id="unsupported-name">Game Name</h2>
+                <p>This game is not yet supported</p>
+                <span class="game-badge coming-soon">COMING SOON</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Modal -->
+    <div class="modal-overlay" id="update-modal" style="display:none;">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-icon">&#x1F680;</span>
+                <h2>Update Available</h2>
+            </div>
+            <div class="modal-body">
+                <p>A new version of ZeusMod is available!</p>
+                <div class="update-version" id="update-version">v1.1.0</div>
+                <div class="update-notes" id="update-notes"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn secondary" id="update-later">Later</button>
+                <button class="modal-btn primary" id="update-download">Download Update</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -8,6 +8,7 @@ void Trainer::Initialize() {
     SetConsoleTitleW(L"IcarusMod");
     freopen_s(&m_con, "CONOUT$", "w", stdout);
     printf("=== IcarusMod Internal ===\n\n");
+    StartPipeServer();
     FindPlayer();
 }
 
@@ -476,7 +477,66 @@ void Trainer::PatchWeight(bool enable) {
     PatchBytes(m_weightAddr, retZero, m_weightBackup, 3, enable, m_weightPatched, "GetTotalWeight");
 }
 
-// Old ZeroDataTableCosts removed - replaced by PatchCraftCosts
+// ============================================================================
+// Named Pipe Server — receives commands from Electron app
+// ============================================================================
+
+void Trainer::StartPipeServer() {
+    CreateThread(nullptr, 0, PipeServerThread, this, 0, nullptr);
+}
+
+DWORD WINAPI Trainer::PipeServerThread(LPVOID param) {
+    Trainer* self = static_cast<Trainer*>(param);
+    printf("[PIPE] Server started on \\\\.\\pipe\\ZeusModPipe\n");
+
+    while (true) {
+        HANDLE pipe = CreateNamedPipeW(
+            L"\\\\.\\pipe\\ZeusModPipe",
+            PIPE_ACCESS_DUPLEX,
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            1, 512, 512, 0, nullptr);
+
+        if (pipe == INVALID_HANDLE_VALUE) { Sleep(1000); continue; }
+
+        if (ConnectNamedPipe(pipe, nullptr) || GetLastError() == ERROR_PIPE_CONNECTED) {
+            char buf[256];
+            DWORD bytesRead;
+
+            while (ReadFile(pipe, buf, sizeof(buf) - 1, &bytesRead, nullptr) && bytesRead > 0) {
+                buf[bytesRead] = 0;
+                char* sep = strchr(buf, ':');
+                if (sep) {
+                    *sep = 0;
+                    const char* cmd = buf;
+                    const char* val = sep + 1;
+                    int v = atoi(val);
+                    float fv = (float)atof(val);
+
+                    if (strcmp(cmd, "godmode") == 0) self->GodMode = (v != 0);
+                    else if (strcmp(cmd, "stamina") == 0) self->InfiniteStamina = (v != 0);
+                    else if (strcmp(cmd, "armor") == 0) self->InfiniteArmor = (v != 0);
+                    else if (strcmp(cmd, "oxygen") == 0) self->InfiniteOxygen = (v != 0);
+                    else if (strcmp(cmd, "food") == 0) self->InfiniteFood = (v != 0);
+                    else if (strcmp(cmd, "water") == 0) self->InfiniteWater = (v != 0);
+                    else if (strcmp(cmd, "craft") == 0) self->FreeCraft = (v != 0);
+                    else if (strcmp(cmd, "weight") == 0) self->NoWeight = (v != 0);
+                    else if (strcmp(cmd, "speed") == 0) self->SpeedHack = (v != 0);
+                    else if (strcmp(cmd, "speed_mult") == 0) self->SpeedMultiplier = fv;
+                    else if (strcmp(cmd, "time") == 0) self->TimeLock = (v != 0);
+                    else if (strcmp(cmd, "time_val") == 0) self->LockedTime = fv;
+
+                    printf("[PIPE] %s = %s\n", cmd, val);
+                    const char* ok = "OK";
+                    DWORD written;
+                    WriteFile(pipe, ok, 2, &written, nullptr);
+                }
+            }
+        }
+        DisconnectNamedPipe(pipe);
+        CloseHandle(pipe);
+    }
+    return 0;
+}
 
 void Trainer::TickGodModefast() {
     if (!m_actorState) return;

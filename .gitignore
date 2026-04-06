@@ -33,6 +33,11 @@ IcarusInjector/ExternalTrainer.*
 IcarusInjector/HotkeyManager.*
 IcarusInjector/Render.*
 
+# Electron
+app/node_modules/
+app/dist/
+app/bin/
+
 # IDE
 .vs/
 *.suo

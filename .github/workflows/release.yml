@@ -28,19 +28,48 @@ jobs:
       - name: Build IcarusInternal
         run: msbuild IcarusInternal/IcarusInternal.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Electron dependencies
+        run: |
+          cd app
+          npm install
+        shell: pwsh
+
       - name: Prepare Release
         run: |
           mkdir release
-          Get-ChildItem -Recurse -Filter "IcarusInjector.exe" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "release/"
-          Get-ChildItem -Recurse -Filter "IcarusInternal.dll" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "release/"
-          dir release/
-          Compress-Archive -Path "release/IcarusInjector.exe", "release/IcarusInternal.dll" -DestinationPath "ZeusMod-${{ github.ref_name }}.zip"
+
+          # Copy C++ binaries to app/bin
+          Get-ChildItem -Recurse -Filter "IcarusInjector.exe" -Path "IcarusInjector" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "app/bin/"
+          Get-ChildItem -Recurse -Filter "IcarusInternal.dll" -Path "IcarusInternal" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "app/bin/"
+
+          # Create standalone zip (C++ only)
+          Copy-Item "app/bin/IcarusInjector.exe" "release/"
+          Copy-Item "app/bin/IcarusInternal.dll" "release/"
+          Compress-Archive -Path "release/IcarusInjector.exe", "release/IcarusInternal.dll" -DestinationPath "ZeusMod-Standalone-${{ github.ref_name }}.zip"
+
+          # Build Electron app
+          cd app
+          npx electron-builder --win portable --x64
+          cd ..
+
+          # Find built electron exe
+          $electronExe = Get-ChildItem -Recurse -Filter "*.exe" -Path "app/dist" | Where-Object { $_.Name -like "ZeusMod*" } | Select-Object -First 1
+          if ($electronExe) {
+            Copy-Item $electronExe.FullName "ZeusMod-App-${{ github.ref_name }}.exe"
+          }
         shell: pwsh
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ZeusMod-${{ github.ref_name }}.zip
+          files: |
+            ZeusMod-Standalone-${{ github.ref_name }}.zip
+            ZeusMod-App-${{ github.ref_name }}.exe
           body: |
             ## ⚡ ZeusMod ${{ github.ref_name }}
 
