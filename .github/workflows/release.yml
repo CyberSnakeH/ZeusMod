@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -17,17 +20,17 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Build IcarusInjector
-        run: msbuild IcarusInjector/IcarusInjector.vcxproj /p:Configuration=Release /p:Platform=x64
+        run: msbuild IcarusInjector/IcarusInjector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
 
       - name: Build IcarusInternal
-        run: msbuild IcarusInternal/IcarusInternal.vcxproj /p:Configuration=Release /p:Platform=x64
+        run: msbuild IcarusInternal/IcarusInternal.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
 
       - name: Prepare Release
         run: |
           mkdir release
-          # Find and copy built files
-          Get-ChildItem -Recurse -Filter "IcarusInjector.exe" -Path "IcarusInjector" | Where-Object { $_.DirectoryName -like "*Release*" } | Copy-Item -Destination "release/"
-          Get-ChildItem -Recurse -Filter "IcarusInternal.dll" -Path "IcarusInternal" | Where-Object { $_.DirectoryName -like "*Release*" } | Copy-Item -Destination "release/"
+          Get-ChildItem -Recurse -Filter "IcarusInjector.exe" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "release/"
+          Get-ChildItem -Recurse -Filter "IcarusInternal.dll" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "release/"
+          dir release/
           Compress-Archive -Path "release/IcarusInjector.exe", "release/IcarusInternal.dll" -DestinationPath "ZeusMod-${{ github.ref_name }}.zip"
         shell: pwsh
 
