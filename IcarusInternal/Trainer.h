@@ -73,8 +73,17 @@ namespace Off {
     // AActor
     constexpr uintptr_t Actor_CustomTimeDilation = 0x98;
 
+    // UWorld
+    constexpr uintptr_t World_GameState = 0x120;
+
+    // AIcarusGameStateSurvival
+    constexpr uintptr_t GS_TimeOfDay = 0x378;
+
     // AIcarusPlayerCharacter
     constexpr uintptr_t Player_InventoryComp = 0x758;
+
+    // UInventory
+    constexpr uintptr_t Inv_CurrentWeight = 0xE8;
 
     // UInventory
     constexpr uintptr_t Inv_Slots = 0xF0;  // FInventorySlotsFastArray
@@ -117,6 +126,9 @@ public:
     bool SpeedHack = false;
     float SpeedMultiplier = 2.0f;
     bool FreeCraft = false;  // Infinite item stacks
+    bool NoWeight = false;   // Zero inventory weight
+    bool TimeLock = false;   // Lock time of day
+    float LockedTime = 12.0f; // Default: noon (0-24)
 
     bool IsReady() const { return m_actorState != nullptr; }
 
@@ -138,6 +150,12 @@ private:
     void PatchSetHealth(bool enable);
     void PatchRemoveItem(bool enable);
     void PatchCraftCosts(bool enable);
+    void PatchWeight(bool enable);
+
+    // GetTotalWeight patch (return 0)
+    uintptr_t m_weightAddr = 0;
+    uint8_t m_weightBackup[3] = {};
+    bool m_weightPatched = false;
 
     void PatchBytes(uintptr_t addr, const uint8_t* patch, uint8_t* backup, int size, bool enable, bool& patched, const char* name);
 
@@ -151,6 +169,11 @@ private:
     uintptr_t m_scaledResourceAddr = 0;
     uint8_t m_scaledResourceBackup[3] = {};
     bool m_scaledResourcePatched = false;
+
+    // FindItemCountByType patch (return 9999 = always have items)
+    uintptr_t m_findItemCountAddr = 0;
+    uint8_t m_findItemCountBackup[6] = {};
+    bool m_findItemCountPatched = false;
 
     // ConsumeItem sub patch (4 bytes: 44 29 66 04)
     uintptr_t m_removeItemAddr = 0;

@@ -26,7 +26,7 @@ namespace C {
 }
 
 static constexpr int OVL_W = 280;
-static constexpr int OVL_H = 380;
+static constexpr int OVL_H = 432;
 
 static HWND g_overlay = nullptr;
 static bool g_visible = false;
@@ -38,7 +38,7 @@ static HFONT g_fontBold = nullptr;
 
 // Toggle hit areas
 struct ToggleArea { RECT rc; int idx; };
-static ToggleArea g_toggles[8]{};
+static ToggleArea g_toggles[10]{};
 
 // ============================================================================
 // Drawing helpers
@@ -137,9 +137,11 @@ static void OnPaint(HDC hdc) {
         {L"Inf. Water",      &t.InfiniteWater},
         {L"Speed Hack",      &t.SpeedHack},
         {L"Free Craft",      &t.FreeCraft},
+        {L"No Weight",       &t.NoWeight},
+        {L"Time Lock",       &t.TimeLock},
     };
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 10; i++) {
         // Dot
         COLORREF dotC = *rows[i].flag ? C::Green : C::TextSec;
         HBRUSH db = CreateSolidBrush(dotC);
@@ -160,6 +162,18 @@ static void OnPaint(HDC hdc) {
         g_toggles[i] = {{tx, y, tx+36, y+18}, i};
 
         y += 26;
+
+        // Time display after Time Lock
+        if (i == 9) {
+            SetTextColor(hdc, C::Purple);
+            SelectObject(hdc, g_fontBold);
+            int hour = (int)t.LockedTime;
+            int min = (int)((t.LockedTime - hour) * 60);
+            wchar_t tm[32];
+            swprintf(tm, 32, L"%02d:%02d", hour, min);
+            RECT tmRc = {OVL_W-100, y-26, OVL_W-55, y-8};
+            DrawTextW(hdc, tm, -1, &tmRc, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+        }
 
         // Speed multiplier line after Speed Hack
         if (i == 6) {
@@ -212,10 +226,10 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 
         bool* flags[] = {
             &t.GodMode, &t.InfiniteStamina, &t.InfiniteArmor, &t.InfiniteOxygen,
-            &t.InfiniteFood, &t.InfiniteWater, &t.SpeedHack, &t.FreeCraft
+            &t.InfiniteFood, &t.InfiniteWater, &t.SpeedHack, &t.FreeCraft, &t.NoWeight, &t.TimeLock
         };
 
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 10; i++) {
             if (PtInRect(&g_toggles[i].rc, pt)) {
                 *flags[i] = !*flags[i];
                 printf("[TOGGLE] %s: %s\n", i==0?"GodMode":i==1?"Stamina":i==2?"Armor":
@@ -226,6 +240,20 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             }
         }
         break;
+    }
+
+    case WM_RBUTTONDOWN: {
+        // Right click on time lock to cycle time: 6 (dawn) → 12 (noon) → 18 (dusk) → 0 (midnight)
+        auto& t2 = Trainer::Get();
+        if (t2.TimeLock) {
+            if (t2.LockedTime < 6.0f) t2.LockedTime = 6.0f;
+            else if (t2.LockedTime < 12.0f) t2.LockedTime = 12.0f;
+            else if (t2.LockedTime < 18.0f) t2.LockedTime = 18.0f;
+            else t2.LockedTime = 0.0f;
+            printf("[TIME] Set to %.0f:00\n", t2.LockedTime);
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        return 0;
     }
 
     case WM_CLOSE:

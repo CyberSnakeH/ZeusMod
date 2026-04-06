@@ -15,6 +15,7 @@ void Trainer::Shutdown() {
     PatchSetHealth(false);
     PatchRemoveItem(false);
     PatchCraftCosts(false);
+    PatchWeight(false);
     printf("[EXIT] Shutdown.\n");
     if (m_con) { fclose(m_con); FreeConsole(); }
 }
@@ -108,7 +109,24 @@ void Trainer::FindPlayer() {
         }
     }
 
-    // Old scan removed - now using offset-based approach in FindPlayer
+    // Find FindItemCountByType via fixed offset (from x64dbg PDB symbols)
+    // Offset: 0x190EF30
+    // Patched with: mov eax, 0x270F; ret (return 9999)
+    if (!m_findItemCountAddr) {
+        uintptr_t b; size_t sz;
+        UE4::GetModuleInfo(b, sz);
+
+        uintptr_t candidate = b + 0x190EF30;
+        uint8_t* p = reinterpret_cast<uint8_t*>(candidate);
+
+        // Verify prologue (should start with standard function prologue)
+        if (p[0] == 0x48 || p[0] == 0x40 || p[0] == 0x55 || p[0] == 0x41) {
+            m_findItemCountAddr = candidate;
+            printf("[CRAFT] FindItemCountByType at 0x%p (offset verified)\n", (void*)candidate);
+        } else {
+            printf("[CRAFT] FindItemCountByType offset mismatch: %02X %02X %02X\n", p[0], p[1], p[2]);
+        }
+    }
 
     printf("[FIND] Scanning for player...\n");
 
@@ -275,6 +293,26 @@ void Trainer::Tick() {
             }
         }
 
+        // Time lock - write TimeOfDay on GameState
+        if (TimeLock && m_gworldPtr) {
+            __try {
+                void* world = *m_gworldPtr;
+                if (world) {
+                    void* gameState = ReadAt<void*>(world, Off::World_GameState);
+                    if (gameState) {
+                        WriteAt<float>(gameState, Off::GS_TimeOfDay, LockedTime);
+                    }
+                }
+            } __except(1) {}
+        }
+
+        // No weight - patch GetTotalWeight to return 0
+        if (NoWeight) {
+            PatchWeight(true);
+        } else {
+            PatchWeight(false);
+        }
+
         // Free craft
         if (FreeCraft) {
             PatchRemoveItem(true);   // Don't consume items
@@ -364,11 +402,15 @@ void Trainer::PatchBytes(uintptr_t addr, const uint8_t* patch, uint8_t* backup, 
 }
 
 void Trainer::PatchCraftCosts(bool enable) {
-    // Patch both functions with: xor eax, eax; ret (return 0)
-    // This makes all recipe costs = 0, displaying X/0 in the UI
-    uint8_t retZero[3] = { 0x31, 0xC0, 0xC3 }; // xor eax,eax; ret
+    // Patch cost functions with: xor eax, eax; ret (return 0 = zero cost)
+    uint8_t retZero[3] = { 0x31, 0xC0, 0xC3 };
     PatchBytes(m_scaledInputAddr, retZero, m_scaledInputBackup, 3, enable, m_scaledInputPatched, "GetScaledRecipeInputCount");
     PatchBytes(m_scaledResourceAddr, retZero, m_scaledResourceBackup, 3, enable, m_scaledResourcePatched, "GetScaledRecipeResourceItemCount");
+
+    // Patch FindItemCountByType with: mov eax, 0x270F; ret (return 9999)
+    // This makes the game think you always have 9999 of every item
+    uint8_t ret9999[6] = { 0xB8, 0x0F, 0x27, 0x00, 0x00, 0xC3 };
+    PatchBytes(m_findItemCountAddr, ret9999, m_findItemCountBackup, 6, enable, m_findItemCountPatched, "FindItemCountByType");
 }
 
 // CanQueueItem removed - using GetScaledRecipeInputCount instead
@@ -403,6 +445,23 @@ void Trainer::PatchRemoveItem(bool enable) {
         m_removeItemPatched = false;
         printf("[PATCH] RemoveItem restored\n");
     }
+}
+
+void Trainer::PatchWeight(bool enable) {
+    if (!m_weightAddr) {
+        uintptr_t b; size_t sz;
+        UE4::GetModuleInfo(b, sz);
+        uintptr_t candidate = b + 0x191F9E0;
+        uint8_t* p = reinterpret_cast<uint8_t*>(candidate);
+        if (p[0] == 0x48 || p[0] == 0x40 || p[0] == 0x55 || p[0] == 0x41 || p[0] == 0x56) {
+            m_weightAddr = candidate;
+            printf("[WEIGHT] GetTotalWeight at 0x%p\n", (void*)candidate);
+        } else {
+            printf("[WEIGHT] GetTotalWeight offset mismatch: %02X %02X\n", p[0], p[1]);
+        }
+    }
+    uint8_t retZero[3] = { 0x31, 0xC0, 0xC3 }; // xor eax,eax; ret (return 0)
+    PatchBytes(m_weightAddr, retZero, m_weightBackup, 3, enable, m_weightPatched, "GetTotalWeight");
 }
 
 // Old ZeroDataTableCosts removed - replaced by PatchCraftCosts
