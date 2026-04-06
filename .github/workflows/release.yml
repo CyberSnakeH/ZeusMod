@@ -1,0 +1,62 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build IcarusInjector
+        run: msbuild IcarusInjector/IcarusInjector.vcxproj /p:Configuration=Release /p:Platform=x64
+
+      - name: Build IcarusInternal
+        run: msbuild IcarusInternal/IcarusInternal.vcxproj /p:Configuration=Release /p:Platform=x64
+
+      - name: Prepare Release
+        run: |
+          mkdir release
+          # Find and copy built files
+          Get-ChildItem -Recurse -Filter "IcarusInjector.exe" -Path "IcarusInjector" | Where-Object { $_.DirectoryName -like "*Release*" } | Copy-Item -Destination "release/"
+          Get-ChildItem -Recurse -Filter "IcarusInternal.dll" -Path "IcarusInternal" | Where-Object { $_.DirectoryName -like "*Release*" } | Copy-Item -Destination "release/"
+          Compress-Archive -Path "release/IcarusInjector.exe", "release/IcarusInternal.dll" -DestinationPath "ZeusMod-${{ github.ref_name }}.zip"
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ZeusMod-${{ github.ref_name }}.zip
+          body: |
+            ## ⚡ ZeusMod ${{ github.ref_name }}
+
+            ### Features
+            - 🛡️ God Mode (health + no debuffs)
+            - ⚡ Infinite Stamina / Armor / Oxygen
+            - 🍖 No Hunger / Thirst
+            - 🔨 Free Craft (no resources needed)
+            - 🎒 No Weight Limit
+            - 🏃 Speed Hack (adjustable x0.5 - x10)
+            - 🌅 Time Lock (dawn/noon/dusk/midnight)
+
+            ### How to Use
+            1. Extract the zip
+            2. Launch Icarus and enter a prospect
+            3. Run `IcarusInjector.exe` as Administrator
+            4. Click **ATTACH TO ICARUS**
+            5. Use the overlay toggles (press **N** to show/hide)
+
+            > ⚠️ Run as Administrator. Single-player only.
+
+            ---
+            *Made by CyberSnake*
+          draft: false
+          prerelease: false
