@@ -145,7 +145,6 @@ void GUI::DrawCheatRow(HDC hdc, int y, const wchar_t* name, bool state, int inde
     // Hover effect background
     RECT rowRc = {15, y-2, WIN_W - 15, y + 22};
     if (state) {
-        HBRUSH hov = CreateSolidBrush(RGB(0, 255, 120, 8));
         // Subtle green tint when active
         DrawRoundedRect(hdc, rowRc, 4, RGB(10, 18, 14), Colors::BG);
     }

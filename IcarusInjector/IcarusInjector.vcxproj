@@ -80,8 +80,6 @@
     <ClInclude Include="GUI.h" />
     <ClInclude Include="Injector.h" />
     <ClInclude Include="ProcessUtils.h" />
-    <ClInclude Include="HotkeyManager.h" />
-    <ClInclude Include="ExternalTrainer.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
@@ -92,8 +90,6 @@
     <ClCompile Include="GUI.cpp" />
     <ClCompile Include="Injector.cpp" />
     <ClCompile Include="ProcessUtils.cpp" />
-    <ClCompile Include="ExternalTrainer.cpp" />
-    <ClCompile Include="HotkeyManager.cpp" />
   </ItemGroup>
 
   <ItemGroup>
