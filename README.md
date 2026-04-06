@@ -14,6 +14,24 @@
 
 ---
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="Pictures/i1.png" width="280" alt="Injector UI">
+  &nbsp;&nbsp;
+  <img src="Pictures/i2.png" width="600" alt="Console + Overlay">
+</p>
+
+<p align="center">
+  <img src="Pictures/i3.png" width="500" alt="Free Craft in action">
+</p>
+
+<p align="center">
+  <em>Left: Injector with neon UI — Right: Debug console + in-game overlay — Bottom: Free craft (9999/0)</em>
+</p>
+
+---
+
 ## 📥 Download
 
 > **[⬇ Download Latest Release](https://github.com/CyberSnakeH/ZeusMod/releases)**
