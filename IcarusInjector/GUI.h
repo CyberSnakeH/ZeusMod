@@ -25,7 +25,7 @@ namespace Colors {
 class GUI {
 public:
     static constexpr int WIN_W = 380;
-    static constexpr int WIN_H = 620;
+    static constexpr int WIN_H = 700;
 
     static constexpr int ID_BTN_ATTACH = 1001;
     static constexpr int ID_STATUS = 1002;

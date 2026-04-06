@@ -193,7 +193,7 @@ static void OnPaint(HDC hdc) {
     SetTextColor(hdc, C::TextSec);
     SelectObject(hdc, g_fontSmall);
     RECT fRc = {0, y, OVL_W, y+16};
-    DrawTextW(hdc, L"N = Toggle  \x2022  F10 = Detach", -1, &fRc, DT_CENTER | DT_SINGLELINE);
+    DrawTextW(hdc, L"Made by CyberSnake  \x2502  N / F10", -1, &fRc, DT_CENTER | DT_SINGLELINE);
 }
 
 // ============================================================================

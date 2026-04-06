@@ -1,174 +1,216 @@
-# ZeusMod - Internal Trainer for Icarus
+<p align="center">
+  <h1 align="center">⚡ ZeusMod</h1>
+  <p align="center">
+    <strong>Internal Trainer for Icarus</strong><br>
+    <em>Made by CyberSnake</em>
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/Game-Icarus-blue?style=for-the-badge" alt="Game">
+    <img src="https://img.shields.io/badge/Engine-Unreal%20Engine%204-orange?style=for-the-badge" alt="Engine">
+    <img src="https://img.shields.io/badge/Language-C++-00599C?style=for-the-badge&logo=cplusplus" alt="C++">
+    <img src="https://img.shields.io/badge/Status-Prototype-yellow?style=for-the-badge" alt="Status">
+  </p>
+</p>
 
-> **Status: Prototype / Work in Progress**
-> This project is still in active development. Some features work, others are being refined.
+---
 
-## Overview
+## 📥 Download
 
-ZeusMod is an internal cheat/trainer for the game [Icarus](https://store.steampowered.com/app/1149460/ICARUS/) (UE4 survival game by RocketWerkz). It uses DLL injection + direct memory access with SDK offsets obtained from a UE4SS dump.
+> **[⬇ Download Latest Release](https://github.com/CyberSnakeH/ZeusMod/releases)**
 
-Unlike external trainers that use `ReadProcessMemory`/`WriteProcessMemory`, ZeusMod runs **inside** the game process for instant, reliable memory access.
+Download `ZeusMod-v1.0.zip`, extract, and run `IcarusInjector.exe` as Administrator.
 
-## Features
+---
 
-| Feature | Status | Method |
-|---------|--------|--------|
-| God Mode | Working | NOP `SetHealth` write instruction (AOB from CE) + health freeze |
-| Infinite Stamina | Working | Direct memory write (offset `0x278`) |
-| Infinite Armor | Working | Direct memory write (offset `0x1E0`) |
-| Infinite Oxygen | Working | Direct memory write (offset `0x328`) |
-| Infinite Food | Working | Direct memory write (offset `0x330`) |
-| Infinite Water | Working | Direct memory write (offset `0x32C`) |
-| Speed Hack | Working | `CustomTimeDilation` on player actor (adjustable x0.5 - x10) |
-| Free Craft | WIP | `RemoveItem` NOP works but UI still greys out button without resources |
+## ✨ Features
 
-## Architecture
+| Feature | Description | Method |
+|:--------|:------------|:-------|
+| 🛡️ **God Mode** | Invincible — health stays at max, no debuffs | AOB NOP on `SetHealth` write instruction |
+| ⚡ **Infinite Stamina** | Sprint forever | Direct memory write (offset `0x278`) |
+| 🛡️ **Infinite Armor** | Armor never breaks | Direct memory write (offset `0x1E0`) |
+| 💨 **Infinite Oxygen** | Breathe underwater forever | Direct memory write (offset `0x328`) |
+| 🍖 **No Hunger/Thirst** | Never starve or dehydrate | Direct memory write (offsets `0x330`, `0x32C`) |
+| 🔨 **Free Craft** | Craft anything without resources (shows 9999/0) | Patches `GetScaledRecipeInputCount`, `FindItemCountByType`, `ConsumeItem` |
+| 🎒 **No Weight Limit** | Carry unlimited items | Patches `GetTotalWeight` to return 0 |
+| 🏃 **Speed Hack** | Adjustable speed (x0.5 to x10) | `CustomTimeDilation` on player actor |
+| 🌅 **Time Lock** | Lock time of day (dawn/noon/dusk/midnight) | Writes `TimeOfDay` float on `GameState` |
+
+---
+
+## 🚀 How to Use
+
+1. **Launch Icarus** via Steam and enter a prospect (be in-game)
+2. **Run `IcarusInjector.exe`** as Administrator
+3. Click **ATTACH TO ICARUS**
+4. The in-game overlay appears — click toggles to enable cheats
+5. Press **N** to show/hide the overlay
+6. **Right-click** the overlay to cycle Time Lock hours
+7. Press **F10** to detach and exit
+
+---
+
+## 🏗️ Architecture
 
 ```
 ZeusMod/
-├── IcarusInjector/       # Win32 GUI app - injects DLL into game process
-│   ├── main.cpp          # Entry point, attach flow
-│   ├── GUI.h/cpp         # Dark theme Win32 window
-│   ├── Injector.h/cpp    # CreateRemoteThread + LoadLibraryW injection
-│   └── ProcessUtils.h/cpp# Process finder, SeDebugPrivilege
+├── IcarusInjector/          # Win32 GUI — DLL injection
+│   ├── main.cpp             # Attach flow, process detection
+│   ├── GUI.h/cpp            # Custom GDI neon UI with toggles
+│   ├── Injector.h/cpp       # CreateRemoteThread + LoadLibraryW
+│   └── ProcessUtils.h/cpp   # Process finder, SeDebugPrivilege
 │
-├── IcarusInternal/       # DLL injected into game - the actual trainer
-│   ├── SDK.h             # Minimal UE4 structs (not used currently, offset-based approach)
-│   ├── UE4.h             # GWorld pattern scan, player hierarchy traversal
-│   ├── Trainer.h/cpp     # Cheat logic, AOB scanning, code patching
-│   ├── Overlay.h/cpp     # Win32 overlay window with checkboxes
-│   └── dllmain.cpp       # DLL entry, thread management
+├── IcarusInternal/          # DLL injected into game process
+│   ├── UE4.h                # GWorld scanner, player hierarchy walker
+│   ├── Trainer.h/cpp        # All cheat logic, AOB scanning, code patching
+│   ├── Overlay.h/cpp        # In-game Win32 overlay with toggles
+│   └── dllmain.cpp          # DLL entry, thread management
 │
-├── Shared/               # Common types between injector and DLL
-│   ├── SharedTypes.h     # CheatID enum, pipe protocol structs
-│   └── PipeProtocol.h/cpp# Named pipe IPC (legacy, not used in current version)
+├── Shared/                  # Common types
+│   └── SharedTypes.h        # Cheat IDs, target process name
 │
-├── dumps/                # UE4SS SDK dump headers
-│   ├── Icarus.hpp        # All Icarus game classes with offsets
-│   ├── Icarus_enums.hpp  # Game enums
-│   ├── Engine.hpp        # UE4 engine classes
-│   └── CoreUObject.hpp   # UE4 core object system
-│
-└── IcarusMod.sln         # Visual Studio solution
+└── dumps/                   # UE4SS SDK dump headers
+    ├── Icarus.hpp           # All game classes with offsets
+    ├── Icarus_enums.hpp     # Game enumerations
+    ├── Engine.hpp           # UE4 engine classes
+    └── CoreUObject.hpp      # UE4 core object system
 ```
 
-## How It Works
+---
 
-### 1. Player Detection
-The trainer scans for the UE4 `GWorld` pointer using an AOB pattern (`48 8B 1D ?? ?? ?? ?? 48 85 DB 74`), then walks the object hierarchy:
+## 🔬 How Signatures Were Found
 
+### Step 1: SDK Dump with UE4SS
+
+We used [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) to dump the complete SDK of Icarus at runtime. UE4SS was injected into the game process, then `Ctrl+H` generated C++ headers with all class definitions and offsets.
+
+This gave us the exact memory layout of every game class:
+
+```cpp
+// UActorState — from UE4SS CXXHeaderDump/Icarus.hpp
+int32 Health;              // 0x1D8
+int32 MaxHealth;           // 0x1DC
+int32 Armor;               // 0x1E0
+
+// UCharacterState (extends UActorState)
+int32 Stamina;             // 0x278
+int32 MaxStamina;          // 0x27C
+
+// USurvivalCharacterState (extends UCharacterState)
+int32 OxygenLevel;         // 0x328
+int32 WaterLevel;          // 0x32C
+int32 FoodLevel;           // 0x330
 ```
-GWorld → UWorld (+0x0D28) → UGameInstance
-  → (+0x38) TArray<ULocalPlayer*> → [0]
-  → (+0x30) APlayerController
-  → (+0x260) AIcarusCharacter
-  → (+0x5A8) UCharacterState (ActorState)
-```
 
-It validates the player by checking that Health and Stamina values are in reasonable ranges (50-5000).
+### Step 2: Finding Write Instructions with Cheat Engine
 
-### 2. SDK Offsets (from UE4SS dump)
+For each stat, we used Cheat Engine to find which instruction **writes** to it:
 
-**UActorState:**
-| Offset | Field | Type |
-|--------|-------|------|
-| `0x1D8` | Health | int32 |
-| `0x1DC` | MaxHealth | int32 |
-| `0x1E0` | Armor | int32 |
-| `0x1E4` | MaxArmor | int32 |
-| `0x210` | CurrentAliveState | uint8 |
+1. Scan the stat value (e.g., health as `4 Bytes`)
+2. Get hit by a mob → rescan the new value
+3. Right-click the address → **"Find out what writes to this address"**
+4. Click **"Show disassembler"** to see the full instruction context
 
-**UCharacterState (extends UActorState):**
-| Offset | Field | Type |
-|--------|-------|------|
-| `0x278` | Stamina | int32 |
-| `0x27C` | MaxStamina | int32 |
-
-**USurvivalCharacterState (extends UCharacterState):**
-| Offset | Field | Type |
-|--------|-------|------|
-| `0x328` | OxygenLevel | int32 |
-| `0x32C` | WaterLevel | int32 |
-| `0x330` | FoodLevel | int32 |
-| `0x338` | MaxOxygen | int32 |
-| `0x340` | MaxWater | int32 |
-| `0x348` | MaxFood | int32 |
-
-**AActor:**
-| Offset | Field | Type |
-|--------|-------|------|
-| `0x098` | CustomTimeDilation | float |
-
-### 3. Code Patching (God Mode)
-The God Mode uses a CE-confirmed AOB to find the health write instruction in `UActorState::SetHealth`:
-
+Example — **SetHealth** (confirmed via CE):
 ```asm
+; UActorState::SetHealth+1B
 79 04           jns +4
 33 C0           xor eax, eax
 EB 09           jmp +9
 41 8B C0        mov eax, r8d
 41 3B D0        cmp edx, r8d
 0F 4C C2        cmovl eax, edx
-89 81 D8010000  mov [rcx+0x1D8], eax  ← NOP this (6 bytes)
+89 81 D8010000  mov [rcx+0x1D8], eax  ← NOP this (6 bytes) = God Mode
 ```
 
-NOPing the final `mov` prevents any health changes. The trainer also writes `Health = MaxHealth` in a dedicated high-frequency thread.
-
-### 4. Free Craft (WIP)
-Currently NOPs the write instruction in `UInventory::RemoveItem` to prevent item consumption:
-
+Example — **ConsumeItem** (confirmed via CE during crafting):
 ```asm
-41 2B CF        sub ecx, r15d
-89 48 04        mov [rax+04], ecx  ← NOP this (3 bytes)
+; UInventory::ConsumeItem+266
+48 3B F9        cmp rdi, rcx
+75 F2           jne -14
+44 29 66 04     sub [rsi+04], r12d    ← NOP this (4 bytes) = items not consumed
+E9 B1000000     jmp +0xB1
 ```
 
-Items are not consumed when crafting, but the UI still requires at least 1 of each resource.
+### Step 3: Finding Function Addresses with x64dbg
 
-## How to Use
+For functions we couldn't find via CE (crafting cost calculations, weight, etc.), we used **x64dbg** with the game's PDB symbols:
+
+1. Attach x64dbg to `Icarus-Win64-Shipping.exe`
+2. Go to **Symbols** tab → filter by function name
+3. x64dbg resolves the address from the PDB
+
+Functions found via x64dbg:
+| Function | Offset | Patch |
+|:---------|:-------|:------|
+| `GetScaledRecipeInputCount` | `0x18167A0` | `xor eax,eax; ret` (return 0 = zero cost) |
+| `GetScaledRecipeResourceItemCount` | `0x1816820` | `xor eax,eax; ret` (return 0) |
+| `FindItemCountByType` | `0x190EF30` | `mov eax, 9999; ret` (always have items) |
+| `GetTotalWeight` | `0x191F9E0` | `xor eax,eax; ret` (return 0 = no weight) |
+
+### Step 4: Player Detection via GWorld
+
+The trainer finds the local player automatically by scanning for the GWorld pointer:
+
+```
+AOB: 48 8B 1D ?? ?? ?? ?? 48 85 DB 74
+
+GWorld → UWorld (+0x0D28) → UGameInstance
+  → (+0x38) TArray<ULocalPlayer*> → [0]
+  → (+0x30) APlayerController
+  → (+0x260) AIcarusCharacter
+  → (+0x5A8) UCharacterState
+```
+
+All hierarchy offsets were verified against the UE4SS SDK dump.
+
+---
+
+## 🔧 Building from Source
 
 ### Prerequisites
-- Visual Studio 2022/2025 with C++ desktop workload
-- Icarus (Steam version)
-- Run as Administrator
+- Visual Studio 2022+ with C++ desktop workload
+- Windows 10/11 SDK
 
 ### Build
-1. Open `IcarusMod.sln` in Visual Studio
-2. Set configuration to `Release | x64`
-3. Build the solution
-4. Copy `IcarusInternal.dll` next to `IcarusInjector.exe`
+```bash
+# Clone
+git clone https://github.com/CyberSnakeH/ZeusMod.git
+cd ZeusMod
 
-### Run
-1. Launch Icarus via Steam
-2. Enter a prospect (be in-game, not the menu)
-3. Run `IcarusInjector.exe` as Administrator
-4. Click "Attach to Icarus"
-5. The overlay window appears with checkboxes
-6. Press **N** to show/hide the overlay
-7. Check the cheats you want to enable
+# Open solution in Visual Studio
+start IcarusMod.sln
 
-## Obtaining SDK Dumps
+# Build → Release | x64
+# Copy IcarusInternal.dll next to IcarusInjector.exe
+```
 
-The `dumps/` folder contains UE4SS SDK headers. To regenerate them:
+### Regenerating SDK Dumps
+```
+1. Download UE4SS from https://github.com/UE4SS-RE/RE-UE4SS/releases
+2. Inject into Icarus (use our InjectUE4SS tool or proxy DLL)
+3. Press Ctrl+H in-game to dump SDK headers
+4. Headers appear in ue4ss/CXXHeaderDump/
+```
 
-1. Download [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS/releases)
-2. Inject it into Icarus (we provide `InjectUE4SS.exe` in tools)
-3. Press `Ctrl+H` in-game to dump the SDK
-4. Headers are generated in `ue4ss/CXXHeaderDump/`
+---
 
-## Known Issues
+## ⚠️ Technical Notes
 
-- **Free Craft**: UI still requires at least 1 of each resource. Full zero-cost crafting needs UI verification bypass (WIP)
-- **God Mode**: Debuff removal (injuries, poison) is partially working via `RemoveDebuffs()` but some effects may persist
-- **Speed Hack**: Affects all player actions (mining, crafting animations) since it uses `CustomTimeDilation`
-- **Game Updates**: AOB signatures and offsets may break after game updates. Re-run UE4SS dump to get new offsets
+- **Rendering**: Icarus supports both DX11 and DX12. The overlay uses a **Win32 window** instead of DX hooks to avoid crashes with either renderer.
+- **Anti-cheat**: Icarus has no kernel-level anti-cheat. Standard DLL injection works.
+- **Multiplayer**: Designed for single-player / private sessions only.
+- **Game updates**: AOB signatures are version-resilient, but fixed offsets (from x64dbg) may break after updates. Re-run UE4SS + x64dbg to get new offsets.
+- **Offsets**: Verified against Icarus April 2026 build.
 
-## Technical Notes
+---
 
-- **DX12**: Icarus uses DX12, not DX11. ImGui overlay via DX hook crashes the game. We use a Win32 overlay window instead.
-- **Anti-cheat**: Icarus has no kernel anti-cheat. Standard DLL injection works.
-- **Multiplayer**: This trainer is designed for single-player/private sessions only.
-- **Offsets**: All offsets verified against Icarus April 2026 build via UE4SS CXXHeaderDump.
+## 📜 License
 
-## License
+For educational and research purposes only. Use at your own risk. Not affiliated with RocketWerkz.
 
-For educational purposes only. Use at your own risk.
+---
+
+<p align="center">
+  <em>Made with ⚡ by <a href="https://github.com/CyberSnakeH">CyberSnake</a></em>
+</p>

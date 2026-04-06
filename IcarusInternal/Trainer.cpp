@@ -360,6 +360,18 @@ void Trainer::PatchSetHealth(bool enable) {
     if (!m_setHealthAddr) return;
 
     if (enable && !m_setHealthPatched) {
+        // Verify bytes are correct before patching (must be 89 XX D8 01 00 00)
+        uint8_t* check = reinterpret_cast<uint8_t*>(m_setHealthAddr);
+        if (check[0] != 0x89 || check[2] != 0xD8 || check[3] != 0x01) {
+            // Already NOPed or wrong address
+            if (check[0] == 0x90) {
+                m_setHealthPatched = true; // Already patched
+                return;
+            }
+            printf("[PATCH] SetHealth bytes mismatch: %02X %02X %02X - skipping\n",
+                check[0], check[1], check[2]);
+            return;
+        }
         // Save 6 original bytes and NOP the write instruction
         memcpy(m_setHealthBackup, reinterpret_cast<void*>(m_setHealthAddr), 6);
         DWORD oldP;

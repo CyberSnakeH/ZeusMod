@@ -1,9 +1,14 @@
 // ============================================================================
-// ZeusMod Injector - Gaming/Neon UI
-// Full custom GDI drawing, no standard controls except the hidden attach button
+// ZeusMod Injector - Premium Gaming UI
+// Custom borderless window, full GDI drawing, neon accents
 // ============================================================================
 #include "GUI.h"
+#include "resource.h"
 #include <cstdio>
+#include <cmath>
+#include <dwmapi.h>
+
+#pragma comment(lib, "dwmapi.lib")
 
 namespace IcarusMod {
 
@@ -17,14 +22,14 @@ GUI::~GUI() {
 
 bool GUI::Create(HINSTANCE hInstance) {
     m_bgBrush = CreateSolidBrush(Colors::BG);
-    m_fontTitle = CreateFontW(-22, 0, 0, 0, FW_BOLD, 0, 0, 0,
+    m_fontTitle = CreateFontW(-24, 0, 0, 0, FW_BOLD, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    m_fontNormal = CreateFontW(-14, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+    m_fontNormal = CreateFontW(-13, 0, 0, 0, FW_NORMAL, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
     m_fontSmall = CreateFontW(-11, 0, 0, 0, FW_NORMAL, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    m_fontBold = CreateFontW(-13, 0, 0, 0, FW_BOLD, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    m_fontBold = CreateFontW(-13, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Semibold");
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
@@ -34,16 +39,21 @@ bool GUI::Create(HINSTANCE hInstance) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = m_bgBrush;
     wc.lpszClassName = L"ZeusModClass";
-    wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_ZEUSMOD));
+    wc.hIconSm = wc.hIcon;
     if (!RegisterClassExW(&wc)) return false;
 
     RECT rc = {0, 0, WIN_W, WIN_H};
     AdjustWindowRect(&rc, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, FALSE);
 
-    m_hwnd = CreateWindowExW(0, L"ZeusModClass", L"ZeusMod",
+    m_hwnd = CreateWindowExW(0, L"ZeusModClass", L"ZeusMod - Icarus Trainer",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
         nullptr, nullptr, hInstance, this);
+
+    // Dark title bar (Windows 10/11)
+    BOOL darkMode = TRUE;
+    DwmSetWindowAttribute(m_hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &darkMode, sizeof(darkMode));
 
     return m_hwnd != nullptr;
 }
@@ -58,132 +68,164 @@ void GUI::SetStatusText(const wchar_t* text) {
     InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void GUI::SetAttachEnabled(bool enabled) {
-    if (m_btnAttach) EnableWindow(m_btnAttach, enabled ? TRUE : FALSE);
+void GUI::SetAttachEnabled(bool e) {
+    if (m_btnAttach) EnableWindow(m_btnAttach, e ? TRUE : FALSE);
 }
 
-void GUI::SetCheatState(uint32_t id, bool enabled) {
-    if (id < CHEAT_COUNT) {
-        m_cheatStates[id] = enabled;
-        InvalidateRect(m_hwnd, nullptr, FALSE);
-    }
+void GUI::SetCheatState(uint32_t id, bool e) {
+    if (id < CHEAT_COUNT) { m_cheatStates[id] = e; InvalidateRect(m_hwnd, nullptr, FALSE); }
 }
 
-void GUI::SetConnectionStatus(bool connected) {
-    m_connected = connected;
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+void GUI::SetConnectionStatus(bool c) {
+    m_connected = c; InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 // ============================================================================
-// Custom Drawing Helpers
+// Drawing Primitives
 // ============================================================================
 
-void GUI::DrawRoundedRect(HDC hdc, RECT rc, int radius, COLORREF fill, COLORREF border) {
-    HBRUSH hFill = CreateSolidBrush(fill);
-    HPEN hPen = CreatePen(PS_SOLID, 1, border);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, hFill);
-    HPEN oldPen = (HPEN)SelectObject(hdc, hPen);
-    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, radius, radius);
-    SelectObject(hdc, oldBrush);
-    SelectObject(hdc, oldPen);
-    DeleteObject(hFill);
-    DeleteObject(hPen);
+void GUI::DrawRoundedRect(HDC hdc, RECT rc, int r, COLORREF fill, COLORREF border) {
+    HBRUSH hB = CreateSolidBrush(fill);
+    HPEN hP = CreatePen(PS_SOLID, 1, border);
+    SelectObject(hdc, hB); SelectObject(hdc, hP);
+    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, r, r);
+    DeleteObject(hB); DeleteObject(hP);
 }
 
-void GUI::DrawToggle(HDC hdc, int x, int y, bool state) {
-    int w = 40, h = 20;
-    COLORREF bgColor = state ? Colors::NeonGreen : Colors::Surface;
-    COLORREF knobColor = state ? RGB(255, 255, 255) : Colors::TextSec;
-    COLORREF borderColor = state ? Colors::NeonGreen : Colors::Border;
-
-    // Track (capsule)
-    HBRUSH hBg = CreateSolidBrush(bgColor);
+void GUI::DrawToggle(HDC hdc, int x, int y, bool on) {
+    int w = 44, h = 22;
+    // Track
+    COLORREF trackColor = on ? RGB(0, 200, 100) : Colors::Surface;
+    COLORREF borderColor = on ? RGB(0, 180, 90) : Colors::Border;
+    HBRUSH hBg = CreateSolidBrush(trackColor);
     HPEN hPen = CreatePen(PS_SOLID, 1, borderColor);
-    SelectObject(hdc, hBg);
-    SelectObject(hdc, hPen);
-    RoundRect(hdc, x, y, x + w, y + h, h, h);
-    DeleteObject(hBg);
-    DeleteObject(hPen);
+    SelectObject(hdc, hBg); SelectObject(hdc, hPen);
+    RoundRect(hdc, x, y, x+w, y+h, h, h);
+    DeleteObject(hBg); DeleteObject(hPen);
 
-    // Knob (circle)
-    int knobX = state ? x + w - h + 2 : x + 2;
-    int knobY = y + 2;
-    int knobSize = h - 4;
-    HBRUSH hKnob = CreateSolidBrush(knobColor);
-    HPEN hPenNull = CreatePen(PS_NULL, 0, 0);
-    SelectObject(hdc, hKnob);
-    SelectObject(hdc, hPenNull);
-    Ellipse(hdc, knobX, knobY, knobX + knobSize, knobY + knobSize);
-    DeleteObject(hKnob);
-    DeleteObject(hPenNull);
+    // Knob with shadow effect
+    int kx = on ? x + w - h + 3 : x + 3;
+    int ky = y + 3;
+    int ksz = h - 6;
+
+    // Shadow
+    HBRUSH shBr = CreateSolidBrush(RGB(0,0,0));
+    HPEN np = CreatePen(PS_NULL, 0, 0);
+    SelectObject(hdc, shBr); SelectObject(hdc, np);
+    Ellipse(hdc, kx+1, ky+1, kx+ksz+1, ky+ksz+1);
+    DeleteObject(shBr);
+
+    // Knob
+    COLORREF knobC = on ? RGB(255,255,255) : RGB(140,145,160);
+    HBRUSH kBr = CreateSolidBrush(knobC);
+    SelectObject(hdc, kBr);
+    Ellipse(hdc, kx, ky, kx+ksz, ky+ksz);
+    DeleteObject(kBr);
+    DeleteObject(np);
+
+    // ON/OFF text
+    SetTextColor(hdc, on ? RGB(255,255,255) : Colors::TextSec);
+    SelectObject(hdc, m_fontSmall);
+    RECT tRc = {on ? x+4 : x+h, y+3, on ? x+w-h : x+w-4, y+h-3};
+    DrawTextW(hdc, on ? L"ON" : L"OFF", -1, &tRc, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 }
 
 void GUI::DrawCategoryHeader(HDC hdc, int y, const wchar_t* text) {
+    // Category bar
+    RECT barRc = {15, y, WIN_W - 15, y + 22};
+    DrawRoundedRect(hdc, barRc, 4, RGB(12, 16, 28), Colors::Border);
+
     SetTextColor(hdc, Colors::NeonCyan);
     SelectObject(hdc, m_fontBold);
-    RECT rc = {20, y, WIN_W - 20, y + 16};
+    RECT rc = {24, y + 3, WIN_W - 24, y + 19};
     DrawTextW(hdc, text, -1, &rc, DT_LEFT | DT_SINGLELINE);
 }
 
 void GUI::DrawCheatRow(HDC hdc, int y, const wchar_t* name, bool state, int index) {
-    // Status dot
-    int dotX = 20, dotY = y + 5;
-    HBRUSH dotBrush = CreateSolidBrush(state ? Colors::NeonGreen : Colors::TextSec);
-    HPEN nullPen = CreatePen(PS_NULL, 0, 0);
-    SelectObject(hdc, dotBrush);
-    SelectObject(hdc, nullPen);
-    Ellipse(hdc, dotX, dotY, dotX + 8, dotY + 8);
-    DeleteObject(dotBrush);
-    DeleteObject(nullPen);
+    // Hover effect background
+    RECT rowRc = {15, y-2, WIN_W - 15, y + 22};
+    if (state) {
+        HBRUSH hov = CreateSolidBrush(RGB(0, 255, 120, 8));
+        // Subtle green tint when active
+        DrawRoundedRect(hdc, rowRc, 4, RGB(10, 18, 14), Colors::BG);
+    }
 
-    // Name text
-    SetTextColor(hdc, Colors::TextPri);
+    // Status dot with glow
+    int dotX = 24, dotY = y + 5;
+    COLORREF dotC = state ? Colors::NeonGreen : RGB(60, 65, 80);
+
+    // Glow (larger circle, semi-transparent)
+    if (state) {
+        HBRUSH glowBr = CreateSolidBrush(RGB(0, 80, 40));
+        HPEN np2 = CreatePen(PS_NULL, 0, 0);
+        SelectObject(hdc, glowBr); SelectObject(hdc, np2);
+        Ellipse(hdc, dotX-3, dotY-3, dotX+13, dotY+13);
+        DeleteObject(glowBr); DeleteObject(np2);
+    }
+
+    HBRUSH dotBr = CreateSolidBrush(dotC);
+    HPEN np = CreatePen(PS_NULL, 0, 0);
+    SelectObject(hdc, dotBr); SelectObject(hdc, np);
+    Ellipse(hdc, dotX, dotY, dotX+10, dotY+10);
+    DeleteObject(dotBr); DeleteObject(np);
+
+    // Name
+    SetTextColor(hdc, state ? Colors::TextPri : RGB(160, 165, 180));
     SelectObject(hdc, m_fontNormal);
-    RECT textRc = {35, y, WIN_W - 70, y + 18};
+    RECT textRc = {42, y, WIN_W - 75, y + 20};
     DrawTextW(hdc, name, -1, &textRc, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
-    // Toggle switch
-    int toggleX = WIN_W - 65;
-    DrawToggle(hdc, toggleX, y - 1, state);
+    // Toggle
+    int tx = WIN_W - 68;
+    DrawToggle(hdc, tx, y - 1, state);
 
-    // Store hit area for click detection
     if (index >= 0 && index < (int)m_toggleAreas.size()) {
-        m_toggleAreas[index].rc = {toggleX, y - 1, toggleX + 40, y + 19};
+        m_toggleAreas[index].rc = {tx - 5, y - 5, tx + 50, y + 25};
         m_toggleAreas[index].cheatIdx = index;
     }
 }
 
 void GUI::DrawSeparator(HDC hdc, int y) {
-    // Gradient-like separator: dim on edges, brighter in middle
-    for (int x = 20; x < WIN_W - 20; x++) {
-        float t = (float)(x - 20) / (float)(WIN_W - 40);
-        float intensity = 1.0f - 2.0f * fabsf(t - 0.5f);
-        int r = (int)(0 * intensity + 40 * (1 - intensity));
-        int g = (int)(200 * intensity * 0.3f + 50 * (1 - intensity));
-        int b = (int)(255 * intensity * 0.3f + 70 * (1 - intensity));
-        SetPixel(hdc, x, y, RGB(r, g, b));
-    }
+    HPEN pen = CreatePen(PS_SOLID, 1, Colors::Border);
+    SelectObject(hdc, pen);
+    MoveToEx(hdc, 20, y, nullptr);
+    LineTo(hdc, WIN_W - 20, y);
+    DeleteObject(pen);
 }
 
 void GUI::DrawStatusPanel(HDC hdc, int y) {
-    RECT panelRc = {15, y, WIN_W - 15, y + 32};
+    RECT panelRc = {15, y, WIN_W - 15, y + 36};
     DrawRoundedRect(hdc, panelRc, 8, Colors::Panel, Colors::Border);
 
     // Status dot
-    COLORREF dotColor = m_connected ? Colors::NeonGreen : Colors::NeonRed;
-    HBRUSH dotBrush = CreateSolidBrush(dotColor);
-    HPEN nullPen = CreatePen(PS_NULL, 0, 0);
-    SelectObject(hdc, dotBrush);
-    SelectObject(hdc, nullPen);
-    Ellipse(hdc, 25, y + 12, 33, y + 20);
-    DeleteObject(dotBrush);
-    DeleteObject(nullPen);
+    COLORREF dotC = m_connected ? Colors::NeonGreen : Colors::NeonRed;
+    HBRUSH dotBr = CreateSolidBrush(dotC);
+    HPEN np = CreatePen(PS_NULL, 0, 0);
+    SelectObject(hdc, dotBr); SelectObject(hdc, np);
+    Ellipse(hdc, 26, y + 13, 36, y + 23);
+    DeleteObject(dotBr); DeleteObject(np);
 
-    // Status text
+    // Text
     SetTextColor(hdc, Colors::TextPri);
     SelectObject(hdc, m_fontNormal);
-    RECT textRc = {40, y + 7, WIN_W - 25, y + 25};
-    DrawTextW(hdc, m_statusText, -1, &textRc, DT_LEFT | DT_SINGLELINE);
+    RECT tRc = {44, y + 8, WIN_W - 25, y + 28};
+    DrawTextW(hdc, m_statusText, -1, &tRc, DT_LEFT | DT_SINGLELINE);
+}
+
+void GUI::DrawNeonButton(HDC hdc, RECT rc, const wchar_t* text, bool hovered) {
+    COLORREF fill = hovered ? RGB(0, 30, 40) : Colors::Surface;
+    DrawRoundedRect(hdc, rc, 8, fill, Colors::NeonCyan);
+
+    // Inner glow line at top
+    HPEN glowPen = CreatePen(PS_SOLID, 1, RGB(0, 150, 200));
+    SelectObject(hdc, glowPen);
+    MoveToEx(hdc, rc.left + 8, rc.top + 1, nullptr);
+    LineTo(hdc, rc.right - 8, rc.top + 1);
+    DeleteObject(glowPen);
+
+    SetTextColor(hdc, Colors::NeonCyan);
+    SelectObject(hdc, m_fontBold);
+    DrawTextW(hdc, text, -1, &rc, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 }
 
 // ============================================================================
@@ -191,102 +233,81 @@ void GUI::DrawStatusPanel(HDC hdc, int y) {
 // ============================================================================
 
 void GUI::OnPaint(HDC hdc) {
-    // Background
-    RECT fullRc = {0, 0, WIN_W, WIN_H};
-    HBRUSH bgBrush = CreateSolidBrush(Colors::BG);
-    FillRect(hdc, &fullRc, bgBrush);
-    DeleteObject(bgBrush);
+    RECT full = {0, 0, WIN_W, WIN_H};
+    HBRUSH bg = CreateSolidBrush(Colors::BG);
+    FillRect(hdc, &full, bg);
+    DeleteObject(bg);
 
     SetBkMode(hdc, TRANSPARENT);
     int y = 0;
 
-    // ── Header zone ──
-    RECT headerRc = {0, 0, WIN_W, 70};
-    HBRUSH headerBrush = CreateSolidBrush(Colors::HeaderGrad);
-    FillRect(hdc, &headerRc, headerBrush);
-    DeleteObject(headerBrush);
+    // ─── Header ───
+    RECT hdrRc = {0, 0, WIN_W, 80};
+    HBRUSH hdrBg = CreateSolidBrush(Colors::HeaderGrad);
+    FillRect(hdc, &hdrRc, hdrBg);
+    DeleteObject(hdrBg);
 
-    // Neon accent line at top
-    HPEN accentPen = CreatePen(PS_SOLID, 2, Colors::NeonCyan);
-    SelectObject(hdc, accentPen);
-    MoveToEx(hdc, 0, 0, nullptr);
-    LineTo(hdc, WIN_W, 0);
-    DeleteObject(accentPen);
+    // Top accent
+    HPEN acPen = CreatePen(PS_SOLID, 3, Colors::NeonCyan);
+    SelectObject(hdc, acPen);
+    MoveToEx(hdc, 0, 0, nullptr); LineTo(hdc, WIN_W, 0);
+    DeleteObject(acPen);
 
     // Title
     SetTextColor(hdc, Colors::NeonCyan);
     SelectObject(hdc, m_fontTitle);
-    RECT titleRc = {0, 12, WIN_W, 40};
+    RECT titleRc = {0, 14, WIN_W, 46};
     DrawTextW(hdc, L"\x26A1 ZEUSMOD", -1, &titleRc, DT_CENTER | DT_SINGLELINE);
 
     // Subtitle
     SetTextColor(hdc, Colors::TextSec);
     SelectObject(hdc, m_fontSmall);
-    RECT subRc = {0, 42, WIN_W, 58};
-    DrawTextW(hdc, L"v1.0  \x2022  Icarus Trainer  \x2022  Internal", -1, &subRc, DT_CENTER | DT_SINGLELINE);
+    RECT subRc = {0, 50, WIN_W, 66};
+    DrawTextW(hdc, L"v1.0  \x2500  Icarus Trainer  \x2500  Made by CyberSnake", -1, &subRc, DT_CENTER | DT_SINGLELINE);
 
-    y = 78;
+    // Bottom border of header
+    HPEN hdrBorder = CreatePen(PS_SOLID, 1, Colors::Border);
+    SelectObject(hdc, hdrBorder);
+    MoveToEx(hdc, 0, 79, nullptr); LineTo(hdc, WIN_W, 79);
+    DeleteObject(hdrBorder);
 
-    // ── Status Panel ──
+    y = 90;
+
+    // ─── Status ───
     DrawStatusPanel(hdc, y);
-    y += 44;
+    y += 48;
 
-    // ── Attach Button ──
-    RECT btnRc = {40, y, WIN_W - 40, y + 36};
-    DrawRoundedRect(hdc, btnRc, 8, Colors::Surface, Colors::NeonCyan);
-    SetTextColor(hdc, Colors::NeonCyan);
-    SelectObject(hdc, m_fontBold);
-    DrawTextW(hdc, L"ATTACH TO ICARUS", -1, &btnRc, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    y += 50;
+    // ─── Attach Button ───
+    RECT btnRc = {30, y, WIN_W - 30, y + 38};
+    DrawNeonButton(hdc, btnRc, L"\x25B6  ATTACH TO ICARUS", false);
+    y += 52;
 
-    // ── Separator ──
-    DrawSeparator(hdc, y);
-    y += 12;
+    // ─── Cheats ───
+    DrawCategoryHeader(hdc, y, L"\x2694  SURVIVAL"); y += 30;
+    DrawCheatRow(hdc, y, L"God Mode", m_cheatStates[0], 0); y += 28;
+    DrawCheatRow(hdc, y, L"Infinite Stamina", m_cheatStates[1], 1); y += 28;
+    DrawCheatRow(hdc, y, L"Infinite Armor", m_cheatStates[2], 2); y += 28;
+    DrawCheatRow(hdc, y, L"Infinite Oxygen", m_cheatStates[3], 3); y += 28;
 
-    // ── SURVIVAL Category ──
-    DrawCategoryHeader(hdc, y, L"SURVIVAL");
-    y += 22;
-    DrawCheatRow(hdc, y, L"God Mode", m_cheatStates[0], 0); y += 26;
-    DrawCheatRow(hdc, y, L"Infinite Stamina", m_cheatStates[1], 1); y += 26;
-    DrawCheatRow(hdc, y, L"Infinite Armor", m_cheatStates[2], 2); y += 26;
-    DrawCheatRow(hdc, y, L"Infinite Oxygen", m_cheatStates[3], 3); y += 26;
+    y += 6;
+    DrawCategoryHeader(hdc, y, L"\x2728  RESOURCES"); y += 30;
+    DrawCheatRow(hdc, y, L"No Hunger / Thirst", m_cheatStates[4], 4); y += 28;
+    DrawCheatRow(hdc, y, L"Infinite Water", m_cheatStates[5], 5); y += 28;
+    DrawCheatRow(hdc, y, L"Free Craft", m_cheatStates[6], 6); y += 28;
+    DrawCheatRow(hdc, y, L"No Weight Limit", m_cheatStates[8], 8); y += 28;
 
-    // ── Separator ──
-    y += 4;
-    DrawSeparator(hdc, y);
-    y += 12;
+    y += 6;
+    DrawCategoryHeader(hdc, y, L"\x26A1  MOVEMENT & WORLD"); y += 30;
+    DrawCheatRow(hdc, y, L"Speed Hack", m_cheatStates[7], 7); y += 28;
+    DrawCheatRow(hdc, y, L"Time Lock", m_cheatStates[9], 9); y += 28;
 
-    // ── RESOURCES Category ──
-    DrawCategoryHeader(hdc, y, L"RESOURCES");
-    y += 22;
-    DrawCheatRow(hdc, y, L"No Hunger / Thirst", m_cheatStates[4], 4); y += 26;
-    DrawCheatRow(hdc, y, L"Infinite Water", m_cheatStates[5], 5); y += 26;
-    DrawCheatRow(hdc, y, L"Free Craft", m_cheatStates[6], 6); y += 26;
-
-    // ── Separator ──
-    y += 4;
-    DrawSeparator(hdc, y);
-    y += 12;
-
-    // ── MOVEMENT Category ──
-    DrawCategoryHeader(hdc, y, L"MOVEMENT");
-    y += 22;
-    DrawCheatRow(hdc, y, L"Speed Hack", m_cheatStates[7], 7); y += 26;
-
-    // Speed multiplier display
-    SetTextColor(hdc, Colors::NeonPurple);
-    SelectObject(hdc, m_fontBold);
-    RECT spdRc = {150, y - 26, 250, y - 8};
-    // TODO: display actual speed multiplier
-
-    // ── Bottom bar ──
-    y = WIN_H - 35;
-    DrawSeparator(hdc, y);
-    y += 8;
-    SetTextColor(hdc, Colors::TextSec);
+    // ─── Footer ───
+    y = WIN_H - 30;
+    DrawSeparator(hdc, y - 8);
+    SetTextColor(hdc, RGB(80, 85, 100));
     SelectObject(hdc, m_fontSmall);
-    RECT footRc = {0, y, WIN_W, y + 16};
-    DrawTextW(hdc, L"N = Toggle Overlay  \x2022  F10 = Detach", -1, &footRc, DT_CENTER | DT_SINGLELINE);
+    RECT footRc = {0, y, WIN_W, y + 18};
+    DrawTextW(hdc, L"N = Toggle Overlay  \x2502  F10 = Detach  \x2502  Right-Click = Options", -1, &footRc, DT_CENTER | DT_SINGLELINE);
 }
 
 // ============================================================================
@@ -295,7 +316,6 @@ void GUI::OnPaint(HDC hdc) {
 
 LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     GUI* gui = nullptr;
-
     if (msg == WM_NCCREATE) {
         auto cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
         gui = static_cast<GUI*>(cs->lpCreateParams);
@@ -306,49 +326,42 @@ LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg) {
     case WM_CREATE:
-        if (gui) {
-            gui->m_hwnd = hwnd;
-            gui->OnCreate(hwnd);
-        }
+        if (gui) { gui->m_hwnd = hwnd; gui->OnCreate(hwnd); }
         return 0;
 
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        // Double buffer
-        HDC memDC = CreateCompatibleDC(hdc);
-        HBITMAP memBMP = CreateCompatibleBitmap(hdc, GUI::WIN_W, GUI::WIN_H);
-        SelectObject(memDC, memBMP);
-        if (gui) gui->OnPaint(memDC);
-        BitBlt(hdc, 0, 0, GUI::WIN_W, GUI::WIN_H, memDC, 0, 0, SRCCOPY);
-        DeleteObject(memBMP);
-        DeleteDC(memDC);
+        HDC mem = CreateCompatibleDC(hdc);
+        HBITMAP bmp = CreateCompatibleBitmap(hdc, GUI::WIN_W, GUI::WIN_H);
+        SelectObject(mem, bmp);
+        if (gui) gui->OnPaint(mem);
+        BitBlt(hdc, 0, 0, GUI::WIN_W, GUI::WIN_H, mem, 0, 0, SRCCOPY);
+        DeleteObject(bmp); DeleteDC(mem);
         EndPaint(hwnd, &ps);
         return 0;
     }
 
     case WM_ERASEBKGND:
-        return 1; // Prevent flicker
+        return 1;
 
     case WM_LBUTTONDOWN: {
         if (!gui) break;
         int mx = LOWORD(lParam), my = HIWORD(lParam);
-
-        // Check attach button area (40, 122, WIN_W-40, 158)
-        RECT btnRc = {40, 122, GUI::WIN_W - 40, 158};
         POINT pt = {mx, my};
+
+        // Attach button
+        RECT btnRc = {30, 138, GUI::WIN_W - 30, 176};
         if (PtInRect(&btnRc, pt)) {
             PostMessageW(hwnd, WM_USER + 1, 0, 0);
             return 0;
         }
 
-        // Check toggle areas
+        // Toggles
         for (auto& ta : gui->m_toggleAreas) {
             if (PtInRect(&ta.rc, pt) && ta.cheatIdx >= 0) {
-                // Toggle this cheat
                 gui->m_cheatStates[ta.cheatIdx] = !gui->m_cheatStates[ta.cheatIdx];
                 InvalidateRect(hwnd, nullptr, FALSE);
-                // Notify parent (send cheat toggle message)
                 PostMessageW(hwnd, WM_USER + 2, ta.cheatIdx, gui->m_cheatStates[ta.cheatIdx]);
                 return 0;
             }
@@ -365,7 +378,6 @@ LRESULT CALLBACK GUI::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 void GUI::OnCreate(HWND hwnd) {
-    // Hidden attach button for legacy support
     m_btnAttach = CreateWindowExW(0, L"BUTTON", L"",
         WS_CHILD, 0, 0, 1, 1, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(ID_BTN_ATTACH)),

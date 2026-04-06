@@ -82,6 +82,10 @@
     <ClInclude Include="ProcessUtils.h" />
     <ClInclude Include="HotkeyManager.h" />
     <ClInclude Include="ExternalTrainer.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="zeusmod.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
