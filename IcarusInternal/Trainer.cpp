@@ -14,6 +14,7 @@ void Trainer::Initialize() {
 void Trainer::Shutdown() {
     PatchSetHealth(false);
     PatchRemoveItem(false);
+    PatchCraftCosts(false);
     printf("[EXIT] Shutdown.\n");
     if (m_con) { fclose(m_con); FreeConsole(); }
 }
@@ -49,71 +50,65 @@ void Trainer::FindPlayer() {
         }
     }
 
-    // Find UInventory::RemoveItem - CE confirmed AOB
-    // jle ??; sub ecx,r15d; mov [rax+04],ecx; mov rcx,[rsp+60]
-    if (!m_removeItemAddr) {
-        uintptr_t b; size_t sz;
-        UE4::GetModuleInfo(b, sz);
-        uintptr_t match = UE4::PatternScan(b, sz,
-            "7E ?? 41 2B ?? 89 48 04 48 8B 4C 24 60");
-        if (match) {
-            m_removeItemAddr = match + 5; // points to "89 48 04"
-            printf("[PATCH] RemoveItem write at 0x%p\n", (void*)m_removeItemAddr);
-        } else {
-            printf("[PATCH] RemoveItem AOB not found\n");
-        }
-    }
-
     // Find GetScaledRecipeInputCount and GetScaledRecipeResourceItemCount
-    // These functions convert int to float (cvtsi2ss), multiply (mulss), convert back (cvttss2si)
-    // Patching them to return 0 makes all recipe costs = 0
+    // via fixed offset from module base (from x64dbg symbols)
+    // Offset 0x18167A0 = GetScaledRecipeInputCount
+    // Offset 0x1816820 = GetScaledRecipeResourceItemCount
     {
         uintptr_t b; size_t sz;
         UE4::GetModuleInfo(b, sz);
 
-        auto findFuncStart = [](uintptr_t ref) -> uintptr_t {
-            for (int back = 3; back < 128; back++) {
-                uint8_t* bp = reinterpret_cast<uint8_t*>(ref - back);
-                if (*bp == 0xCC && *(bp + 1) != 0xCC) return ref - back + 1;
+        // Verify by checking the prologue bytes
+        uintptr_t candidate1 = b + 0x18167A0;
+        uintptr_t candidate2 = b + 0x1816820;
+
+        // GetScaledRecipeInputCount starts with: 48 89 5C 24 08 48 89 6C 24 10
+        uint8_t* p1 = reinterpret_cast<uint8_t*>(candidate1);
+        if (p1[0] == 0x48 && p1[1] == 0x89 && p1[2] == 0x5C && p1[3] == 0x24 && p1[4] == 0x08) {
+            m_scaledInputAddr = candidate1;
+            printf("[CRAFT] GetScaledRecipeInputCount at 0x%p (offset verified)\n", (void*)m_scaledInputAddr);
+        } else {
+            printf("[CRAFT] GetScaledRecipeInputCount offset mismatch! Bytes: %02X %02X %02X %02X %02X\n",
+                p1[0], p1[1], p1[2], p1[3], p1[4]);
+            // Fallback: AOB scan for the unique sequence after prologue
+            // 49 8B E9 49 8B F8 8B DA 48 8B F1 E8
+            uintptr_t match = UE4::PatternScan(b, sz, "49 8B E9 49 8B F8 8B DA 48 8B F1 E8");
+            if (match) {
+                // Function starts 20 bytes before this (prologue is 20 bytes)
+                m_scaledInputAddr = match - 20;
+                printf("[CRAFT] GetScaledRecipeInputCount at 0x%p (AOB fallback)\n", (void*)m_scaledInputAddr);
+            } else {
+                printf("[CRAFT] GetScaledRecipeInputCount NOT FOUND\n");
             }
-            return 0;
-        };
-
-        uintptr_t scan = b;
-        size_t remain = sz;
-        int found = 0;
-
-        while (remain > 64 && found < 2) {
-            // cvtsi2ss = F3 0F 2A (int->float, used for scaling recipe counts)
-            uintptr_t match = UE4::PatternScan(scan, remain, "F3 0F 2A");
-            if (!match) break;
-
-            uint8_t* p = reinterpret_cast<uint8_t*>(match);
-            bool hasMul = false, hasConvert = false;
-            for (int i = 3; i < 50; i++) {
-                if (p[i]==0xF3 && p[i+1]==0x0F && p[i+2]==0x59) hasMul = true;     // mulss
-                if (p[i]==0xF3 && p[i+1]==0x0F && p[i+2]==0x2C) hasConvert = true;  // cvttss2si
-            }
-
-            if (hasMul && hasConvert) {
-                uintptr_t func = findFuncStart(match);
-                if (func) {
-                    if (found == 0) {
-                        m_scaledInputCount.addr = func;
-                        printf("[CRAFT] ScaledInputCount at 0x%p\n", (void*)func);
-                    } else if (func != m_scaledInputCount.addr) {
-                        m_scaledResourceCount.addr = func;
-                        printf("[CRAFT] ScaledResourceCount at 0x%p\n", (void*)func);
-                    }
-                    found++;
-                }
-            }
-
-            scan = match + 1;
-            remain = (b + sz) - scan;
         }
-        if (found == 0) printf("[CRAFT] No crafting scale functions found\n");
+
+        // GetScaledRecipeResourceItemCount starts similarly
+        uint8_t* p2 = reinterpret_cast<uint8_t*>(candidate2);
+        if (p2[0] == 0x48 && p2[1] == 0x89 && p2[2] == 0x5C && p2[3] == 0x24) {
+            m_scaledResourceAddr = candidate2;
+            printf("[CRAFT] GetScaledRecipeResourceItemCount at 0x%p (offset verified)\n", (void*)m_scaledResourceAddr);
+        } else {
+            printf("[CRAFT] GetScaledRecipeResourceItemCount offset mismatch\n");
+        }
     }
+
+    // Find UInventory::ConsumeItem - CE confirmed AOB
+    // cmp rdi,rcx; jne; sub [rsi+04],r12d; jmp
+    // The sub [rsi+04],r12d (44 29 66 04) is what decrements item count
+    if (!m_removeItemAddr) {
+        uintptr_t b; size_t sz;
+        UE4::GetModuleInfo(b, sz);
+        uintptr_t match = UE4::PatternScan(b, sz,
+            "48 3B F9 75 F2 44 29 66 04 E9");
+        if (match) {
+            m_removeItemAddr = match + 5; // points to "44 29 66 04"
+            printf("[PATCH] ConsumeItem sub at 0x%p\n", (void*)m_removeItemAddr);
+        } else {
+            printf("[PATCH] ConsumeItem AOB not found\n");
+        }
+    }
+
+    // Old scan removed - now using offset-based approach in FindPlayer
 
     printf("[FIND] Scanning for player...\n");
 
@@ -282,10 +277,11 @@ void Trainer::Tick() {
 
         // Free craft
         if (FreeCraft) {
-            PatchRemoveItem(true);
-            if (!m_recipesZeroed) ZeroRecipeCosts();
+            PatchRemoveItem(true);   // Don't consume items
+            PatchCraftCosts(true);   // Set all costs to 0 (X/0 display)
         } else {
             PatchRemoveItem(false);
+            PatchCraftCosts(false);
         }
     }
     __except (1) {
@@ -345,223 +341,71 @@ void Trainer::PatchSetHealth(bool enable) {
     }
 }
 
-void Trainer::PatchFunc(FuncPatch& p, bool enable, const char* name) {
-    if (!p.addr) return;
-    int sz = p.floatReturn ? 4 : 3;
-    p.patchSize = sz;
+// Old PatchFunc removed - replaced by PatchBytes
 
-    if (enable && !p.patched) {
-        memcpy(p.backup, reinterpret_cast<void*>(p.addr), sz);
+void Trainer::PatchBytes(uintptr_t addr, const uint8_t* patch, uint8_t* backup, int size, bool enable, bool& patched, const char* name) {
+    if (!addr) return;
+    if (enable && !patched) {
+        memcpy(backup, reinterpret_cast<void*>(addr), size);
         DWORD oldP;
-        VirtualProtect(reinterpret_cast<void*>(p.addr), sz, PAGE_EXECUTE_READWRITE, &oldP);
-        if (p.floatReturn) {
-            uint8_t patch[4] = { 0x0F, 0x57, 0xC0, 0xC3 }; // xorps xmm0,xmm0; ret (return 0.0f)
-            memcpy(reinterpret_cast<void*>(p.addr), patch, 4);
-        } else {
-            uint8_t patch[3] = { 0xB0, 0x01, 0xC3 }; // mov al, 1; ret (return true)
-            memcpy(reinterpret_cast<void*>(p.addr), patch, 3);
-        }
-        VirtualProtect(reinterpret_cast<void*>(p.addr), sz, oldP, &oldP);
-        p.patched = true;
-        printf("[PATCH] %s -> return %s\n", name, p.floatReturn ? "0.0f" : "true");
-    } else if (!enable && p.patched) {
+        VirtualProtect(reinterpret_cast<void*>(addr), size, PAGE_EXECUTE_READWRITE, &oldP);
+        memcpy(reinterpret_cast<void*>(addr), patch, size);
+        VirtualProtect(reinterpret_cast<void*>(addr), size, oldP, &oldP);
+        patched = true;
+        printf("[PATCH] %s patched\n", name);
+    } else if (!enable && patched) {
         DWORD oldP;
-        VirtualProtect(reinterpret_cast<void*>(p.addr), sz, PAGE_EXECUTE_READWRITE, &oldP);
-        memcpy(reinterpret_cast<void*>(p.addr), p.backup, sz);
-        VirtualProtect(reinterpret_cast<void*>(p.addr), sz, oldP, &oldP);
-        p.patched = false;
+        VirtualProtect(reinterpret_cast<void*>(addr), size, PAGE_EXECUTE_READWRITE, &oldP);
+        memcpy(reinterpret_cast<void*>(addr), backup, size);
+        VirtualProtect(reinterpret_cast<void*>(addr), size, oldP, &oldP);
+        patched = false;
         printf("[PATCH] %s restored\n", name);
     }
 }
 
+void Trainer::PatchCraftCosts(bool enable) {
+    // Patch both functions with: xor eax, eax; ret (return 0)
+    // This makes all recipe costs = 0, displaying X/0 in the UI
+    uint8_t retZero[3] = { 0x31, 0xC0, 0xC3 }; // xor eax,eax; ret
+    PatchBytes(m_scaledInputAddr, retZero, m_scaledInputBackup, 3, enable, m_scaledInputPatched, "GetScaledRecipeInputCount");
+    PatchBytes(m_scaledResourceAddr, retZero, m_scaledResourceBackup, 3, enable, m_scaledResourcePatched, "GetScaledRecipeResourceItemCount");
+}
+
+// CanQueueItem removed - using GetScaledRecipeInputCount instead
+
 void Trainer::PatchRemoveItem(bool enable) {
     if (!m_removeItemAddr) return;
     if (enable && !m_removeItemPatched) {
-        memcpy(m_removeItemBackup, reinterpret_cast<void*>(m_removeItemAddr), 3);
+        // Read and log current bytes
+        uint8_t current[4];
+        memcpy(current, reinterpret_cast<void*>(m_removeItemAddr), 4);
+        printf("[PATCH] ConsumeItem at 0x%p: bytes = %02X %02X %02X %02X\n",
+            (void*)m_removeItemAddr, current[0], current[1], current[2], current[3]);
+
+        memcpy(m_removeItemBackup, current, 4);
         DWORD oldP;
-        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 3, PAGE_EXECUTE_READWRITE, &oldP);
-        memset(reinterpret_cast<void*>(m_removeItemAddr), 0x90, 3); // NOP
-        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 3, oldP, &oldP);
+        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 4, PAGE_EXECUTE_READWRITE, &oldP);
+        memset(reinterpret_cast<void*>(m_removeItemAddr), 0x90, 4); // NOP 4 bytes
+        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 4, oldP, &oldP);
+
+        // Verify
+        memcpy(current, reinterpret_cast<void*>(m_removeItemAddr), 4);
+        printf("[PATCH] After NOP: %02X %02X %02X %02X %s\n",
+            current[0], current[1], current[2], current[3],
+            (current[0] == 0x90) ? "(OK!)" : "(FAILED!)");
+
         m_removeItemPatched = true;
-        printf("[PATCH] RemoveItem write NOPed (free craft ON)\n");
     } else if (!enable && m_removeItemPatched) {
         DWORD oldP;
-        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 3, PAGE_EXECUTE_READWRITE, &oldP);
-        memcpy(reinterpret_cast<void*>(m_removeItemAddr), m_removeItemBackup, 3);
-        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 3, oldP, &oldP);
+        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 4, PAGE_EXECUTE_READWRITE, &oldP);
+        memcpy(reinterpret_cast<void*>(m_removeItemAddr), m_removeItemBackup, 4);
+        VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 4, oldP, &oldP);
         m_removeItemPatched = false;
-        printf("[PATCH] RemoveItem restored (free craft OFF)\n");
+        printf("[PATCH] RemoveItem restored\n");
     }
 }
 
-void Trainer::ZeroRecipeCosts() {
-    // Safe heap scan for FCraftingInput arrays
-    // FCraftingInput = { FItemsStaticRowHandle(0x18), int32 Count } = 0x1C bytes
-    // We require 3+ consecutive entries with valid FName + Count to reduce false positives
-    // Only scan PAGE_READWRITE regions (skip GPU/DX12 memory)
-
-    printf("[CRAFT] Safe scanning for recipe costs...\n");
-
-    uintptr_t moduleBase; size_t moduleSize;
-    UE4::GetModuleInfo(moduleBase, moduleSize);
-
-    MEMORY_BASIC_INFORMATION mbi;
-    uintptr_t addr = 0x10000;
-    int totalZeroed = 0;
-    int regionsScanned = 0;
-
-    while (VirtualQuery(reinterpret_cast<void*>(addr), &mbi, sizeof(mbi))) {
-        uintptr_t regionBase = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
-        uintptr_t regionEnd = regionBase + mbi.RegionSize;
-
-        // STRICT filter: only pure heap memory
-        bool isSafe = (mbi.State == MEM_COMMIT) &&
-                      (mbi.Protect == PAGE_READWRITE) &&   // EXACTLY PAGE_READWRITE, nothing else
-                      (mbi.Type == MEM_PRIVATE) &&          // Private heap, not mapped file
-                      (mbi.RegionSize >= 0x1000) &&         // At least 4KB
-                      (mbi.RegionSize <= 0x4000000);        // Max 64MB (skip huge GPU buffers)
-
-        // Skip game module memory
-        if (regionBase >= moduleBase && regionBase < moduleBase + moduleSize) isSafe = false;
-
-        if (isSafe) {
-            regionsScanned++;
-            __try {
-                uint8_t* mem = reinterpret_cast<uint8_t*>(mbi.BaseAddress);
-                size_t regionSize = mbi.RegionSize;
-
-                for (size_t i = 0; i + 0x1C * 3 < regionSize; i += 4) {
-                    // Require 3 consecutive valid FCraftingInputs
-                    bool valid = true;
-                    for (int e = 0; e < 3 && valid; e++) {
-                        int32_t name = *reinterpret_cast<int32_t*>(mem + i + e * 0x1C);
-                        int32_t nameNum = *reinterpret_cast<int32_t*>(mem + i + e * 0x1C + 4);
-                        int32_t count = *reinterpret_cast<int32_t*>(mem + i + e * 0x1C + 0x18);
-
-                        // FName: ComparisonIndex > 0, Number == 0 (most FNames)
-                        // Count: 1-200 (reasonable recipe cost)
-                        if (name <= 0 || name > 100000) valid = false;
-                        if (nameNum != 0) valid = false;  // FName::Number should be 0
-                        if (count < 1 || count > 200) valid = false;
-                    }
-
-                    if (valid) {
-                        // Also check that all 3 have different FNames (different items)
-                        int32_t n1 = *reinterpret_cast<int32_t*>(mem + i);
-                        int32_t n2 = *reinterpret_cast<int32_t*>(mem + i + 0x1C);
-                        int32_t n3 = *reinterpret_cast<int32_t*>(mem + i + 0x1C * 2);
-                        if (n1 == n2 || n2 == n3 || n1 == n3) { continue; }
-
-                        // Zero all counts in this array
-                        for (int e = 0; e < 10; e++) {
-                            int32_t* countPtr = reinterpret_cast<int32_t*>(mem + i + e * 0x1C + 0x18);
-                            int32_t* namePtr = reinterpret_cast<int32_t*>(mem + i + e * 0x1C);
-                            int32_t* numPtr = reinterpret_cast<int32_t*>(mem + i + e * 0x1C + 4);
-                            if (*countPtr >= 1 && *countPtr <= 200 && *namePtr > 0 && *namePtr < 100000 && *numPtr == 0) {
-                                *countPtr = 0;
-                                totalZeroed++;
-                            } else {
-                                break;
-                            }
-                        }
-                        i += 10 * 0x1C;
-                    }
-                }
-            }
-            __except (1) {}
-        }
-        addr = regionEnd;
-    }
-
-    printf("[CRAFT] Scanned %d regions. Zeroed %d recipe costs!\n", regionsScanned, totalZeroed);
-    m_recipesZeroed = (totalZeroed > 0);
-}
-
-/* old code removed
-    // UE4 DataTable internal layout:
-    // UDataTable inherits UObject (0x28) + RowStruct (0x28)
-    // The RowMap is a TMap<FName, uint8*> at offset ~0x30
-    // But the exact offset varies. We use a different approach:
-    //
-    // FProcessorRecipe::Inputs is a TArray<FCraftingInput> at offset 0x90 in each recipe
-    // FCraftingInput::Count is at offset 0x18, size 0x1C per entry
-    //
-    // Strategy: Find GObjects array, iterate to find UDataTable named "D_ProcessorRecipes"
-    // then access its RowMap
-    //
-    // Simpler strategy: Since we know GObjects from our earlier scan,
-    // we scan the game's heap memory for FProcessorRecipe structures
-    // by looking for the pattern: TArray at known layout positions
-
-    // Actually, the simplest approach: scan all readable memory for
-    // FCraftingInput arrays with known Count values (10, 4, 6 = Stone Pickaxe)
-    // and zero them
-
-    printf("[CRAFT] Scanning for recipe data in memory...\n");
-
-    uintptr_t base; size_t size;
-    UE4::GetModuleInfo(base, size);
-
-    // The DataTable rows are allocated on the heap, not in the module
-    // We need to scan process memory regions
-    MEMORY_BASIC_INFORMATION mbi;
-    uintptr_t addr = 0x10000;
-    int totalZeroed = 0;
-
-    while (VirtualQuery(reinterpret_cast<void*>(addr), &mbi, sizeof(mbi))) {
-        if (mbi.State == MEM_COMMIT &&
-            (mbi.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE)) &&
-            mbi.RegionSize > 0x100 && mbi.RegionSize < 0x10000000) {
-
-            __try {
-                uint8_t* mem = reinterpret_cast<uint8_t*>(mbi.BaseAddress);
-                size_t regionSize = mbi.RegionSize;
-
-                // FProcessorRecipe has Inputs TArray at +0x90
-                // TArray = {Data*, Count, Max}
-                // We look for TArrays where each element is 0x1C bytes
-                // and has Count field (int32) at +0x18 with values > 0
-
-                // Scan for FCraftingInput patterns: a valid FName (RowName)
-                // followed by a DataTableName, then Count > 0
-                // FCraftingInput is 0x1C bytes: FItemsStaticRowHandle(0x18) + int32 Count
-
-                for (size_t i = 0; i + 0x1C * 3 < regionSize; i += 4) {
-                    // Check if this looks like a FCraftingInput with Count > 0
-                    // followed by another FCraftingInput with Count > 0
-                    int32_t count1 = *reinterpret_cast<int32_t*>(mem + i + 0x18);
-                    int32_t count2 = *reinterpret_cast<int32_t*>(mem + i + 0x18 + 0x1C);
-
-                    // Valid counts: 1-1000, and both should be reasonable
-                    if (count1 >= 1 && count1 <= 500 && count2 >= 1 && count2 <= 500) {
-                        // Check the FName indices are reasonable (positive, < 100000)
-                        int32_t name1 = *reinterpret_cast<int32_t*>(mem + i);
-                        int32_t name2 = *reinterpret_cast<int32_t*>(mem + i + 0x1C);
-
-                        if (name1 > 0 && name1 < 200000 && name2 > 0 && name2 < 200000 && name1 != name2) {
-                            // This looks like 2 consecutive FCraftingInputs
-                            // Zero all counts in this array (up to 10 entries)
-                            for (int e = 0; e < 10; e++) {
-                                int32_t* countPtr = reinterpret_cast<int32_t*>(mem + i + e * 0x1C + 0x18);
-                                if (*countPtr >= 1 && *countPtr <= 500) {
-                                    *countPtr = 0;
-                                    totalZeroed++;
-                                } else {
-                                    break; // End of array
-                                }
-                            }
-                            i += 10 * 0x1C; // Skip past this array
-                        }
-                    }
-                }
-            }
-            __except (1) {}
-        }
-        addr = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
-    }
-
-    printf("[CRAFT] Zeroed %d recipe input counts!\n", totalZeroed);
-*/
+// Old ZeroDataTableCosts removed - replaced by PatchCraftCosts
 
 void Trainer::TickGodModefast() {
     if (!m_actorState) return;

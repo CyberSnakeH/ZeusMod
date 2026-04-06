@@ -131,28 +131,31 @@ public:
     int GetArmor() const;
     int GetMaxArmor() const;
 
-    struct FuncPatch {
-        uintptr_t addr = 0;
-        uint8_t backup[4] = {};
-        int patchSize = 3;
-        bool patched = false;
-        bool floatReturn = false;
-    };
-
 private:
     Trainer() = default;
     void FindPlayer();
     void RemoveDebuffs();
     void PatchSetHealth(bool enable);
-    void PatchFunc(FuncPatch& p, bool enable, const char* name);
     void PatchRemoveItem(bool enable);
-    void ZeroRecipeCosts();
+    void PatchCraftCosts(bool enable);
 
-    // RemoveItem write patch
+    void PatchBytes(uintptr_t addr, const uint8_t* patch, uint8_t* backup, int size, bool enable, bool& patched, const char* name);
+
+
+    // GetScaledRecipeInputCount patch (return 0 = zero cost)
+    uintptr_t m_scaledInputAddr = 0;
+    uint8_t m_scaledInputBackup[3] = {};
+    bool m_scaledInputPatched = false;
+
+    // GetScaledRecipeResourceItemCount patch
+    uintptr_t m_scaledResourceAddr = 0;
+    uint8_t m_scaledResourceBackup[3] = {};
+    bool m_scaledResourcePatched = false;
+
+    // ConsumeItem sub patch (4 bytes: 44 29 66 04)
     uintptr_t m_removeItemAddr = 0;
-    uint8_t m_removeItemBackup[3] = {};
+    uint8_t m_removeItemBackup[4] = {};
     bool m_removeItemPatched = false;
-    bool m_recipesZeroed = false;
 
 public:
     float m_originalWalkSpeed = 0.0f;
@@ -171,7 +174,4 @@ private:
     bool m_setHealthPatched = false;
 
     // Free craft patches
-    FuncPatch m_scaledInputCount;    // GetScaledRecipeInputCount -> return 0
-    FuncPatch m_scaledResourceCount; // GetScaledRecipeResourceItemCount -> return 0
-    FuncPatch m_costMultiplier;      // GetStatBasedResourceCostMultiplier -> return 0.0f
 };
