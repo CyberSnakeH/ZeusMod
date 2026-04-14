@@ -36,33 +36,30 @@ jobs:
       - name: Install Electron dependencies
         run: |
           cd app
-          npm install
+          npm ci
         shell: pwsh
 
       - name: Prepare Release
         run: |
-          mkdir release
-          mkdir -Force app/bin
+          New-Item -ItemType Directory -Force -Path "release" | Out-Null
+          New-Item -ItemType Directory -Force -Path "app/bin" | Out-Null
 
-          # Copy C++ binaries to app/bin
-          Get-ChildItem -Recurse -Filter "IcarusInjector.exe" -Path "IcarusInjector" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "app/bin/"
-          Get-ChildItem -Recurse -Filter "IcarusInternal.dll" -Path "IcarusInternal" | Where-Object { $_.DirectoryName -like "*Release*" } | Select-Object -First 1 | Copy-Item -Destination "app/bin/"
+          Remove-Item "release\*" -Force -ErrorAction SilentlyContinue
+          Remove-Item "app\bin\*" -Force -ErrorAction SilentlyContinue
 
-          # Create standalone zip (C++ only)
+          # Copy the exact maintained native outputs into the Electron bundle.
+          Copy-Item "IcarusInjector/bin/Release/IcarusInjector.exe" "app/bin/IcarusInjector.exe"
+          Copy-Item "IcarusInjector/bin/Release/IcarusInternal.dll" "app/bin/IcarusInternal.dll"
+
+          # Standalone native package
           Copy-Item "app/bin/IcarusInjector.exe" "release/"
           Copy-Item "app/bin/IcarusInternal.dll" "release/"
           Compress-Archive -Path "release/IcarusInjector.exe", "release/IcarusInternal.dll" -DestinationPath "ZeusMod-Standalone-${{ github.ref_name }}.zip"
 
-          # Build Electron app
+          # Electron installer
           cd app
-          npx electron-builder --win portable --x64
+          npm run dist
           cd ..
-
-          # Find built electron exe
-          $electronExe = Get-ChildItem -Recurse -Filter "*.exe" -Path "app/dist" | Where-Object { $_.Name -like "ZeusMod*" } | Select-Object -First 1
-          if ($electronExe) {
-            Copy-Item $electronExe.FullName "ZeusMod-App-${{ github.ref_name }}.exe"
-          }
         shell: pwsh
 
       - name: Create GitHub Release
@@ -70,29 +67,26 @@ jobs:
         with:
           files: |
             ZeusMod-Standalone-${{ github.ref_name }}.zip
-            ZeusMod-App-${{ github.ref_name }}.exe
+            app/dist/ZeusMod-Setup-*.exe
           body: |
-            ## ⚡ ZeusMod ${{ github.ref_name }}
+            ## ZeusMod ${{ github.ref_name }}
 
-            ### Features
-            - 🛡️ God Mode (health + no debuffs)
-            - ⚡ Infinite Stamina / Armor / Oxygen
-            - 🍖 No Hunger / Thirst
-            - 🔨 Free Craft (no resources needed)
-            - 🎒 No Weight Limit
-            - 🏃 Speed Hack (adjustable x0.5 - x10)
-            - 🌅 Time Lock (dawn/noon/dusk/midnight)
+            ### Highlights
+            - God Mode
+            - Infinite Stamina / Armor / Oxygen
+            - No Hunger / Thirst
+            - Free Craft
+            - No Weight Limit
+            - Speed Hack
+            - Time Lock
 
             ### How to Use
-            1. Extract the zip
-            2. Launch Icarus and enter a prospect
-            3. Run `IcarusInjector.exe` as Administrator
-            4. Click **ATTACH TO ICARUS**
-            5. Use the overlay toggles (press **N** to show/hide)
+            1. Extract the zip.
+            2. Launch Icarus and enter a prospect.
+            3. Run `IcarusInjector.exe` as Administrator.
+            4. Click **ATTACH TO ICARUS**.
+            5. Use the desktop app or in-game overlay to manage features.
 
-            > ⚠️ Run as Administrator. Single-player only.
-
-            ---
-            *Made by CyberSnake*
+            > Run as Administrator. Intended for solo or private sessions only.
           draft: false
           prerelease: false

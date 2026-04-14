@@ -22,91 +22,94 @@ inline T* PtrAt(void* base, uintptr_t offset) {
 }
 
 // ============================================================================
-// Confirmed offsets from UE4SS SDK dump
+// Runtime-resolved offsets populated by Trainer::ResolveAllOffsets().
+// Zero means unresolved for the current build.
 // ============================================================================
 namespace Off {
-    // UWorld
-    constexpr uintptr_t World_GameInstance = 0x0D28;
+    // UWorld / UGameInstance / UPlayer / AController
+    inline uintptr_t World_GameInstance = 0;
 
     // UGameInstance -> TArray<ULocalPlayer*>
-    constexpr uintptr_t GI_LocalPlayers = 0x38; // TArray: data at +0, count at +8
+    inline uintptr_t GI_LocalPlayers = 0; // TArray: data at +0, count at +8
 
     // UPlayer
-    constexpr uintptr_t Player_Controller = 0x30;
+    inline uintptr_t Player_Controller = 0;
 
     // AController
-    constexpr uintptr_t Ctrl_Character = 0x260;
+    inline uintptr_t Ctrl_Character = 0;
 
     // AIcarusCharacter
-    constexpr uintptr_t Char_ActorState = 0x5A8;
-    constexpr uintptr_t Char_InstanceComponents = 0x1F0;   // TArray
-    constexpr uintptr_t Char_BlueprintComponents = 0x200;  // TArray
+    inline uintptr_t Char_ActorState = 0;
+    inline uintptr_t Char_InstanceComponents = 0;   // TArray
+    inline uintptr_t Char_BlueprintComponents = 0;  // TArray
 
     // UActorState
-    constexpr uintptr_t State_Health = 0x1D8;
-    constexpr uintptr_t State_MaxHealth = 0x1DC;
-    constexpr uintptr_t State_Armor = 0x1E0;
-    constexpr uintptr_t State_MaxArmor = 0x1E4;
-    constexpr uintptr_t State_AliveState = 0x210;
+    inline uintptr_t State_Health = 0;
+    inline uintptr_t State_MaxHealth = 0;
+    inline uintptr_t State_Armor = 0;
+    inline uintptr_t State_MaxArmor = 0;
+    inline uintptr_t State_AliveState = 0;
 
     // UCharacterState (extends UActorState)
-    constexpr uintptr_t State_Stamina = 0x278;
-    constexpr uintptr_t State_MaxStamina = 0x27C;
+    inline uintptr_t State_Stamina = 0;
+    inline uintptr_t State_MaxStamina = 0;
 
     // USurvivalCharacterState (extends UCharacterState)
-    constexpr uintptr_t State_Oxygen = 0x328;
-    constexpr uintptr_t State_Water = 0x32C;
-    constexpr uintptr_t State_Food = 0x330;
-    constexpr uintptr_t State_MaxOxygen = 0x338;
-    constexpr uintptr_t State_MaxWater = 0x340;
-    constexpr uintptr_t State_MaxFood = 0x348;
+    inline uintptr_t State_Oxygen = 0;
+    inline uintptr_t State_Water = 0;
+    inline uintptr_t State_Food = 0;
+    inline uintptr_t State_MaxOxygen = 0;
+    inline uintptr_t State_MaxWater = 0;
+    inline uintptr_t State_MaxFood = 0;
 
     // ACharacter -> CharacterMovement
-    constexpr uintptr_t Char_MovementComp = 0x288;
+    inline uintptr_t Char_MovementComp = 0;
 
     // UCharacterMovementComponent
-    constexpr uintptr_t CMC_MaxWalkSpeed = 0x18C;
-    constexpr uintptr_t CMC_MaxWalkSpeedCrouched = 0x190;
-    constexpr uintptr_t CMC_MaxSwimSpeed = 0x194;
-    constexpr uintptr_t CMC_MaxFlySpeed = 0x198;
+    inline uintptr_t CMC_MaxWalkSpeed = 0;
+    inline uintptr_t CMC_MaxWalkSpeedCrouched = 0;
+    inline uintptr_t CMC_MaxSwimSpeed = 0;
+    inline uintptr_t CMC_MaxFlySpeed = 0;
 
     // AActor
-    constexpr uintptr_t Actor_CustomTimeDilation = 0x98;
+    inline uintptr_t Actor_CustomTimeDilation = 0;
 
     // UWorld
-    constexpr uintptr_t World_GameState = 0x120;
+    inline uintptr_t World_GameState = 0;
 
     // AIcarusGameStateSurvival
-    constexpr uintptr_t GS_TimeOfDay = 0x378;
+    inline uintptr_t GS_TimeOfDay = 0;
+    inline uintptr_t GS_SecondsPerGameDay = 0;
+    inline uintptr_t GS_ReplicatedLastSessionProspectGameTime = 0;
 
     // AIcarusPlayerCharacter
-    constexpr uintptr_t Player_InventoryComp = 0x758;
+    inline uintptr_t Player_InventoryComp = 0;
 
     // UInventory
-    constexpr uintptr_t Inv_CurrentWeight = 0xE8;
+    inline uintptr_t Inv_CurrentWeight = 0;
 
     // UInventory
-    constexpr uintptr_t Inv_Slots = 0xF0;  // FInventorySlotsFastArray
+    inline uintptr_t Inv_Slots = 0xF0;  // FInventorySlotsFastArray
 
     // FInventorySlotsFastArray -> TArray<FInventorySlot>
-    constexpr uintptr_t FastArray_Slots = 0x108;
+    inline uintptr_t FastArray_Slots = 0x108;
 
     // FInventorySlot
-    constexpr uintptr_t Slot_ItemData = 0x10;  // FItemData
-    constexpr uintptr_t Slot_Size = 0x240;
+    inline uintptr_t Slot_ItemData = 0x10;  // FItemData
+    inline uintptr_t Slot_Size = 0x240;
 
     // FItemData
-    constexpr uintptr_t Item_DynamicData = 0x30;  // TArray<FItemDynamicData>
+    inline uintptr_t Item_DynamicData = 0x30;  // TArray<FItemDynamicData>
 
     // FItemDynamicData
-    constexpr uintptr_t Dyn_PropertyType = 0x00;  // EDynamicItemProperties (uint8)
-    constexpr uintptr_t Dyn_Value = 0x04;          // int32
-    constexpr uintptr_t Dyn_Size = 0x08;
+    inline uintptr_t Dyn_PropertyType = 0x00;  // EDynamicItemProperties (uint8)
+    inline uintptr_t Dyn_Value = 0x04;          // int32
+    inline uintptr_t Dyn_Size = 0x08;
     constexpr uint8_t DynProp_ItemableStack = 7;
 
     // UModifierStateComponent
-    constexpr uintptr_t Mod_Lifetime = 0x108;
-    constexpr uintptr_t Mod_Remaining = 0x110;
+    inline uintptr_t Mod_Lifetime = 0;
+    inline uintptr_t Mod_Remaining = 0;
 }
 
 class Trainer {
@@ -151,8 +154,13 @@ private:
     void StartPipeServer();
     static DWORD WINAPI PipeServerThread(LPVOID param);
     void PatchRemoveItem(bool enable);
-    void PatchCraftCosts(bool enable);
+    void PatchFreeCraftItems(bool enable);
+    void PatchFreeCraftProcessorGates(bool enable);
     void PatchWeight(bool enable);
+
+    // Resolve active UPROPERTY offsets in the Off:: namespace via
+    // UObjectLookup. Called once at trainer init after UObjectLookup::Initialize.
+    void ResolveAllOffsets();
 
     // GetTotalWeight patch (return 0)
     uintptr_t m_weightAddr = 0;
@@ -161,15 +169,14 @@ private:
 
     void PatchBytes(uintptr_t addr, const uint8_t* patch, uint8_t* backup, int size, bool enable, bool& patched, const char* name);
 
-
-    // GetScaledRecipeInputCount patch (return 0 = zero cost)
+    // GetScaledRecipeInputCount patch (return 1 - production bails on 0)
     uintptr_t m_scaledInputAddr = 0;
-    uint8_t m_scaledInputBackup[3] = {};
+    uint8_t m_scaledInputBackup[6] = {};
     bool m_scaledInputPatched = false;
 
-    // GetScaledRecipeResourceItemCount patch
+    // GetScaledRecipeResourceItemCount patch (return 1)
     uintptr_t m_scaledResourceAddr = 0;
-    uint8_t m_scaledResourceBackup[3] = {};
+    uint8_t m_scaledResourceBackup[6] = {};
     bool m_scaledResourcePatched = false;
 
     // FindItemCountByType patch (return 9999 = always have items)
@@ -177,10 +184,36 @@ private:
     uint8_t m_findItemCountBackup[6] = {};
     bool m_findItemCountPatched = false;
 
+    // CanSatisfyRecipeQueryInput patch (B0 01 C3 = mov al,1; ret).
+    // Byte-patch, not a hook: this is a Blueprint UFunction and a __fastcall
+    // detour crashes on it, but overwriting the prologue with "return true"
+    // is safe. Removes the "need at least 1 of each material" limitation.
+    uintptr_t m_canSatisfyQueryAddr = 0;
+    uint8_t m_canSatisfyQueryBackup[3] = {};
+    bool m_canSatisfyQueryPatched = false;
+
+    // GetItemCount patch (return 9999). DIFFERENT from FindItemCountByType:
+    // this one walks the inventory slot array and sums counts for a given
+    // item type. The craft UI uses this for the "X/Y materials" display
+    // and the craft button enable check.
+    uintptr_t m_getItemCountAddr = 0;
+    uint8_t m_getItemCountBackup[6] = {};
+    bool m_getItemCountPatched = false;
+
     // ConsumeItem sub patch (4 bytes: 44 29 66 04)
     uintptr_t m_removeItemAddr = 0;
     uint8_t m_removeItemBackup[4] = {};
     bool m_removeItemPatched = false;
+
+    // Non-material processor gates. Keep these separate from item-cost
+    // bypasses so we can enable "craft anyway" without touching tick paths.
+    uintptr_t m_shelterRequirementsAddr = 0;
+    uint8_t m_shelterRequirementsBackup[3] = {};
+    bool m_shelterRequirementsPatched = false;
+
+    uintptr_t m_canStartProcessingAddr = 0;
+    uint8_t m_canStartProcessingBackup[3] = {};
+    bool m_canStartProcessingPatched = false;
 
 public:
     float m_originalWalkSpeed = 0.0f;
@@ -192,11 +225,12 @@ private:
     void* m_actorState = nullptr;
     int m_retryTimer = 0;
     FILE* m_con = nullptr;
+    bool m_prevFreeCraft = false;
 
     // SetHealth write instruction patch (6 bytes NOP)
     uintptr_t m_setHealthAddr = 0;
     uint8_t m_setHealthBackup[6] = {};
     bool m_setHealthPatched = false;
 
-    // Free craft patches
+    // FreeCraft item-path patches
 };

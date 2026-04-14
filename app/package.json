@@ -1,13 +1,14 @@
 {
   "name": "zeusmod",
   "version": "1.0.0",
-  "description": "ZeusMod - Game Trainer Platform",
+  "description": "ZeusMod desktop launcher and updater for Icarus",
   "main": "main.js",
   "author": "CyberSnake",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "dist": "electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -16,20 +17,48 @@
   "build": {
     "appId": "com.cybersnake.zeusmod",
     "productName": "ZeusMod",
+    "artifactName": "ZeusMod-Setup-${version}.${ext}",
     "win": {
-      "target": "portable",
-      "icon": "src/assets/icon.png"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "signAndEditExecutable": false,
+      "icon": "../IcarusInjector/zeusmod.ico"
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ZeusMod"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "CyberSnakeH",
+        "repo": "ZeusMod"
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",
       "src/**/*",
+      "scripts/**/*",
       "bin/**/*"
     ],
     "extraResources": [
       {
         "from": "bin/",
         "to": "bin/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "scripts/",
+        "to": "scripts/",
         "filter": ["**/*"]
       }
     ]

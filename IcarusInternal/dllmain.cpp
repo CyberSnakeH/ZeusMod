@@ -1,9 +1,11 @@
 #include <Windows.h>
 #include "Trainer.h"
 #include "Overlay.h"
+#include "Render.h"
 
 static HMODULE g_module = nullptr;
 static bool g_running = true;
+static bool g_usingLegacyOverlay = false;
 
 static DWORD WINAPI GodModeThread(LPVOID) {
     while (g_running) {
@@ -25,18 +27,23 @@ static DWORD WINAPI MainThread(LPVOID) {
     Sleep(5000);
 
     Trainer::Get().Initialize();
-    Overlay::Create();
+    if (!Render::Initialize()) {
+        printf("[RENDER] Falling back to legacy overlay.\n");
+        g_usingLegacyOverlay = Overlay::Create();
+    }
 
     // Start dedicated god mode thread
     CreateThread(nullptr, 0, GodModeThread, nullptr, 0, nullptr);
 
     while (g_running) {
-        Overlay::ProcessMessages();
+        if (g_usingLegacyOverlay) {
+            Overlay::ProcessMessages();
 
-        static bool nWas = false;
-        bool nNow = (GetAsyncKeyState(0x4E) & 0x8000) != 0;
-        if (nNow && !nWas) Overlay::Toggle();
-        nWas = nNow;
+            static bool nWas = false;
+            bool nNow = (GetAsyncKeyState(0x4E) & 0x8000) != 0;
+            if (nNow && !nWas) Overlay::Toggle();
+            nWas = nNow;
+        }
 
         if (GetAsyncKeyState(VK_F10) & 1) g_running = false;
 
@@ -45,7 +52,11 @@ static DWORD WINAPI MainThread(LPVOID) {
         Sleep(30);
     }
 
-    Overlay::Destroy();
+    if (g_usingLegacyOverlay) {
+        Overlay::Destroy();
+    } else {
+        Render::Shutdown();
+    }
     Trainer::Get().Shutdown();
     Sleep(500);
     FreeLibraryAndExitThread(g_module, 0);

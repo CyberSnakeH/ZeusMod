@@ -7,7 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Shared", "Shared\Shared.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IcarusInjector", "IcarusInjector\IcarusInjector.vcxproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IcarusTrainer", "IcarusTrainer\IcarusTrainer.vcxproj", "{C3D4E5F6-3333-4444-5555-666677778888}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IcarusInternal", "IcarusInternal\IcarusInternal.vcxproj", "{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,10 +23,10 @@ Global
 		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|x64.Build.0 = Debug|x64
 		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.ActiveCfg = Release|x64
 		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.Build.0 = Release|x64
-		{C3D4E5F6-3333-4444-5555-666677778888}.Debug|x64.ActiveCfg = Debug|x64
-		{C3D4E5F6-3333-4444-5555-666677778888}.Debug|x64.Build.0 = Debug|x64
-		{C3D4E5F6-3333-4444-5555-666677778888}.Release|x64.ActiveCfg = Release|x64
-		{C3D4E5F6-3333-4444-5555-666677778888}.Release|x64.Build.0 = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Debug|x64.ActiveCfg = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Debug|x64.Build.0 = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Release|x64.ActiveCfg = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

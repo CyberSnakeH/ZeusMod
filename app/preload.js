@@ -1,25 +1,19 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('zeusmod', {
-    // Window
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
 
-    // Steam
-    getGames: () => ipcRenderer.invoke('steam:getGames'),
-
-    // Game
-    detectGame: (processName) => ipcRenderer.invoke('game:detect', processName),
+    getGameStatus: () => ipcRenderer.invoke('game:getStatus'),
     injectGame: () => ipcRenderer.invoke('game:inject'),
 
-    // Updates
-    onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (_, data) => callback(data)),
-    downloadUpdate: (url) => ipcRenderer.send('update:download', url),
+    getUpdateState: () => ipcRenderer.invoke('update:getState'),
+    checkForUpdates: () => ipcRenderer.invoke('update:check'),
+    installUpdate: () => ipcRenderer.invoke('update:install'),
+    openReleasePage: () => ipcRenderer.invoke('update:openReleasePage'),
+    onUpdateState: (callback) => ipcRenderer.on('update:state', (_, data) => callback(data)),
 
-    // Cheat control
     toggleCheat: (name, value) => ipcRenderer.invoke('cheat:toggle', name, value),
-
-    // App info
-    getVersion: () => ipcRenderer.invoke('app:version'),
+    getVersion: () => ipcRenderer.invoke('app:version')
 });

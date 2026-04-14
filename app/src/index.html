@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
-    <!-- Custom Title Bar -->
     <div class="titlebar">
         <div class="titlebar-drag">
             <span class="titlebar-icon">&#x26A1;</span>
@@ -22,59 +21,35 @@
     </div>
 
     <div class="app-container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <span class="sidebar-label">MY GAMES</span>
-                <span class="sidebar-count" id="game-count">0</span>
-            </div>
-
-            <div class="sidebar-search">
-                <input type="text" class="search-input" id="game-search" placeholder="Search games...">
-            </div>
-
-            <div class="sidebar-games" id="games-list">
-                <div class="loading-games">Scanning Steam...</div>
-            </div>
-
-            <div class="sidebar-footer">
-                <div class="sidebar-credit">
-                    <span class="credit-icon">&#x26A1;</span>
-                    Made by <strong>CyberSnake</strong>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content -->
         <div class="main-content">
-            <!-- No game selected state -->
-            <div class="empty-state" id="empty-state">
-                <div class="empty-icon">&#x1F3AE;</div>
-                <h2>Select a game</h2>
-                <p>Choose a supported game from your library to get started</p>
-            </div>
-
-            <!-- Game panel (hidden by default) -->
-            <div class="game-panel" id="game-panel" style="display:none;">
-                <!-- Game Header -->
+            <div class="game-panel" id="game-panel" style="display:flex;">
                 <div class="game-header">
                     <div class="game-header-info">
                         <h1 class="game-title" id="panel-game-title">Icarus</h1>
                         <div class="game-header-meta">
-                            <span class="game-badge supported">SUPPORTED</span>
+                            <span class="game-badge supported">ICARUS ONLY</span>
                             <div class="game-header-status">
-                                <span class="status-dot" id="status-dot"></span>
-                                <span class="status-text" id="status-text">Not Connected</span>
+                                <span class="status-dot searching" id="status-dot"></span>
+                                <span class="status-text" id="status-text">Checking game status...</span>
                             </div>
+                        </div>
+                        <div class="game-header-meta">
+                            <span class="game-badge">Install</span>
+                            <span class="status-text" id="install-path">Searching for your Steam install...</span>
+                        </div>
+                        <div class="game-header-meta update-meta">
+                            <span class="game-badge">Updates</span>
+                            <span class="status-text" id="update-status">Waiting for update checks.</span>
+                            <span class="update-chip" id="update-chip">v1.0.0</span>
+                            <button class="header-action-btn" id="btn-check-updates">Check Now</button>
                         </div>
                     </div>
                     <button class="play-btn" id="btn-play">
                         <span class="play-icon">&#x25B6;</span>
-                        <span>ATTACH</span>
+                        <span>ATTACH TO ICARUS</span>
                     </button>
                 </div>
 
-                <!-- Cheats -->
                 <div class="cheats-container">
                     <div class="cheat-category">
                         <div class="category-header">
@@ -85,28 +60,28 @@
                             <div class="cheat-row" data-cheat="godmode">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F6E1;&#xFE0F;</span>
-                                    <div><div class="cheat-name">God Mode</div><div class="cheat-desc">Invincible - max health, no debuffs</div></div>
+                                    <div><div class="cheat-name">God Mode</div><div class="cheat-desc">Keeps health stable and clears debuffs.</div></div>
                                 </div>
                                 <label class="toggle"><input type="checkbox" data-cheat-toggle="godmode"><span class="toggle-slider"></span></label>
                             </div>
                             <div class="cheat-row" data-cheat="stamina">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x26A1;</span>
-                                    <div><div class="cheat-name">Infinite Stamina</div><div class="cheat-desc">Sprint forever</div></div>
+                                    <div><div class="cheat-name">Infinite Stamina</div><div class="cheat-desc">Removes stamina drain while sprinting.</div></div>
                                 </div>
                                 <label class="toggle"><input type="checkbox" data-cheat-toggle="stamina"><span class="toggle-slider"></span></label>
                             </div>
                             <div class="cheat-row" data-cheat="armor">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F6E1;&#xFE0F;</span>
-                                    <div><div class="cheat-name">Infinite Armor</div><div class="cheat-desc">Armor never breaks</div></div>
+                                    <div><div class="cheat-name">Infinite Armor</div><div class="cheat-desc">Continuously restores player armor.</div></div>
                                 </div>
                                 <label class="toggle"><input type="checkbox" data-cheat-toggle="armor"><span class="toggle-slider"></span></label>
                             </div>
                             <div class="cheat-row" data-cheat="oxygen">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F4A8;</span>
-                                    <div><div class="cheat-name">Infinite Oxygen</div><div class="cheat-desc">Breathe underwater forever</div></div>
+                                    <div><div class="cheat-name">Infinite Oxygen</div><div class="cheat-desc">Prevents oxygen depletion underwater.</div></div>
                                 </div>
                                 <label class="toggle"><input type="checkbox" data-cheat-toggle="oxygen"><span class="toggle-slider"></span></label>
                             </div>
@@ -122,21 +97,21 @@
                             <div class="cheat-row" data-cheat="food">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F356;</span>
-                                    <div><div class="cheat-name">No Hunger / Thirst</div><div class="cheat-desc">Never starve or dehydrate</div></div>
+                                    <div><div class="cheat-name">No Hunger / Thirst</div><div class="cheat-desc">Locks food and water at safe levels.</div></div>
                                 </div>
                                 <label class="toggle"><input type="checkbox" data-cheat-toggle="food"><span class="toggle-slider"></span></label>
                             </div>
                             <div class="cheat-row" data-cheat="craft">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F528;</span>
-                                    <div><div class="cheat-name">Free Craft</div><div class="cheat-desc">Craft anything without resources</div></div>
+                                    <div><div class="cheat-name">Free Craft</div><div class="cheat-desc">Queues recipes without consuming resources.</div></div>
                                 </div>
                                 <label class="toggle"><input type="checkbox" data-cheat-toggle="craft"><span class="toggle-slider"></span></label>
                             </div>
                             <div class="cheat-row" data-cheat="weight">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F392;</span>
-                                    <div><div class="cheat-name">No Weight Limit</div><div class="cheat-desc">Carry unlimited items</div></div>
+                                    <div><div class="cheat-name">No Weight Limit</div><div class="cheat-desc">Forces inventory weight to zero.</div></div>
                                 </div>
                                 <label class="toggle"><input type="checkbox" data-cheat-toggle="weight"><span class="toggle-slider"></span></label>
                             </div>
@@ -152,7 +127,7 @@
                             <div class="cheat-row" data-cheat="speed">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F3C3;</span>
-                                    <div><div class="cheat-name">Speed Hack</div><div class="cheat-desc">Adjustable movement speed</div></div>
+                                    <div><div class="cheat-name">Speed Hack</div><div class="cheat-desc">Applies a configurable movement multiplier.</div></div>
                                 </div>
                                 <div class="cheat-controls">
                                     <button class="speed-btn" id="speed-down">-</button>
@@ -164,10 +139,10 @@
                             <div class="cheat-row" data-cheat="time">
                                 <div class="cheat-info">
                                     <span class="cheat-icon">&#x1F305;</span>
-                                    <div><div class="cheat-name">Time Lock</div><div class="cheat-desc">Lock time of day</div></div>
+                                    <div><div class="cheat-name">Time Lock</div><div class="cheat-desc">Keeps the prospect clock pinned to a target hour.</div></div>
                                 </div>
                                 <div class="cheat-controls">
-                                    <span class="time-value" id="time-value" title="Click to change">12:00</span>
+                                    <span class="time-value" id="time-value" title="Click to cycle preset times">12:00</span>
                                     <label class="toggle"><input type="checkbox" data-cheat-toggle="time"><span class="toggle-slider"></span></label>
                                 </div>
                             </div>
@@ -175,18 +150,9 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Unsupported game state -->
-            <div class="unsupported-state" id="unsupported-state" style="display:none;">
-                <div class="empty-icon">&#x1F6A7;</div>
-                <h2 id="unsupported-name">Game Name</h2>
-                <p>This game is not yet supported</p>
-                <span class="game-badge coming-soon">COMING SOON</span>
-            </div>
         </div>
     </div>
 
-    <!-- Update Modal -->
     <div class="modal-overlay" id="update-modal" style="display:none;">
         <div class="modal">
             <div class="modal-header">
@@ -194,13 +160,15 @@
                 <h2>Update Available</h2>
             </div>
             <div class="modal-body">
-                <p>A new version of ZeusMod is available!</p>
+                <p>A newer build of ZeusMod is ready.</p>
                 <div class="update-version" id="update-version">v1.1.0</div>
                 <div class="update-notes" id="update-notes"></div>
+                <div class="update-progress" id="update-progress"></div>
             </div>
             <div class="modal-actions">
                 <button class="modal-btn secondary" id="update-later">Later</button>
-                <button class="modal-btn primary" id="update-download">Download Update</button>
+                <button class="modal-btn secondary" id="update-open-page">View Release</button>
+                <button class="modal-btn primary" id="update-download">Download & Install</button>
             </div>
         </div>
     </div>

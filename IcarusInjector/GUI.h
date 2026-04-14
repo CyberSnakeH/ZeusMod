@@ -25,7 +25,7 @@ namespace Colors {
 class GUI {
 public:
     static constexpr int WIN_W = 380;
-    static constexpr int WIN_H = 700;
+    static constexpr int WIN_H = 440;
 
     static constexpr int ID_BTN_ATTACH = 1001;
     static constexpr int ID_STATUS = 1002;
@@ -58,6 +58,7 @@ private:
 
     HWND m_hwnd = nullptr;
     HWND m_btnAttach = nullptr;
+    RECT m_btnRect = {};
     bool m_connected = false;
     wchar_t m_statusText[256] = L"Not Connected";
 

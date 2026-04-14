@@ -228,13 +228,19 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             &t.GodMode, &t.InfiniteStamina, &t.InfiniteArmor, &t.InfiniteOxygen,
             &t.InfiniteFood, &t.InfiniteWater, &t.SpeedHack, &t.FreeCraft, &t.NoWeight, &t.TimeLock
         };
+        const char* names[] = {
+            "GodMode", "Stamina", "Armor", "Oxygen", "Food",
+            "Water", "Speed", "Craft", "Weight", "TimeLock"
+        };
 
         for (int i = 0; i < 10; i++) {
             if (PtInRect(&g_toggles[i].rc, pt)) {
                 *flags[i] = !*flags[i];
-                printf("[TOGGLE] %s: %s\n", i==0?"GodMode":i==1?"Stamina":i==2?"Armor":
-                    i==3?"Oxygen":i==4?"Food":i==5?"Water":i==6?"Speed":i==7?"Craft":"?",
-                    *flags[i] ? "ON" : "OFF");
+                printf("[TOGGLE] %s: %s\n", names[i], *flags[i] ? "ON" : "OFF");
+                if (i == 9 && *flags[i]) {
+                    printf("[TIME] Current target: %.0f:00 (right click to cycle 06 -> 12 -> 18 -> 00)\n",
+                        t.LockedTime);
+                }
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
             }

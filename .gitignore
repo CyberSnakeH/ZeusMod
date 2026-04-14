@@ -16,6 +16,9 @@ x64/
 
 # Tools & temp
 tools/
+dumps/
+offsets.json
+offsets.json.bak
 *.zip
 *.pak
 *_temp/
@@ -37,9 +40,12 @@ IcarusInjector/Render.*
 app/node_modules/
 app/dist/
 app/bin/
+release/
+NotUsed/
 
 # IDE
 .vs/
+.claude/
 *.suo
 *.sdf
 *.opensdf
