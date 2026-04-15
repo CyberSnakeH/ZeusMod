@@ -25,6 +25,61 @@ jobs:
       - name: Build IcarusInjector
         run: msbuild IcarusInjector/IcarusInjector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
 
+      - name: Fetch native dependencies (ImGui + MinHook)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $libs = "IcarusInternal/libs"
+          New-Item -ItemType Directory -Force -Path "$libs/imgui"   | Out-Null
+          New-Item -ItemType Directory -Force -Path "$libs/minhook" | Out-Null
+
+          # --- ImGui v1.91.8 ---
+          $imguiTag = "v1.91.8"
+          $imguiZip = "$env:RUNNER_TEMP/imgui.zip"
+          $imguiDir = "$env:RUNNER_TEMP/imgui-extract"
+          Invoke-WebRequest "https://github.com/ocornut/imgui/archive/refs/tags/$imguiTag.zip" -OutFile $imguiZip
+          if (Test-Path $imguiDir) { Remove-Item $imguiDir -Recurse -Force }
+          Expand-Archive -Path $imguiZip -DestinationPath $imguiDir
+          $imguiSrc = (Get-ChildItem $imguiDir -Directory | Select-Object -First 1).FullName
+          $imguiCore = @(
+            'imgui.h','imgui.cpp','imgui_internal.h','imconfig.h',
+            'imgui_draw.cpp','imgui_tables.cpp','imgui_widgets.cpp','imgui_demo.cpp',
+            'imstb_rectpack.h','imstb_textedit.h','imstb_truetype.h'
+          )
+          foreach ($f in $imguiCore) {
+            if (Test-Path "$imguiSrc/$f") {
+              Copy-Item "$imguiSrc/$f" "$libs/imgui/" -Force
+            }
+          }
+          $imguiBackends = @(
+            'imgui_impl_dx11.h','imgui_impl_dx11.cpp',
+            'imgui_impl_win32.h','imgui_impl_win32.cpp'
+          )
+          foreach ($f in $imguiBackends) {
+            Copy-Item "$imguiSrc/backends/$f" "$libs/imgui/" -Force
+          }
+
+          # --- MinHook (master) ---
+          $mhZip = "$env:RUNNER_TEMP/minhook.zip"
+          $mhDir = "$env:RUNNER_TEMP/minhook-extract"
+          Invoke-WebRequest "https://github.com/TsudaKageyu/minhook/archive/refs/heads/master.zip" -OutFile $mhZip
+          if (Test-Path $mhDir) { Remove-Item $mhDir -Recurse -Force }
+          Expand-Archive -Path $mhZip -DestinationPath $mhDir
+          $mhSrc = (Get-ChildItem $mhDir -Directory | Select-Object -First 1).FullName
+          New-Item -ItemType Directory -Force -Path "$libs/minhook/include" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$libs/minhook/src/hde"  | Out-Null
+          Copy-Item "$mhSrc/include/MinHook.h" "$libs/minhook/include/" -Force
+          Copy-Item "$mhSrc/src/buffer.c"      "$libs/minhook/src/" -Force
+          Copy-Item "$mhSrc/src/buffer.h"      "$libs/minhook/src/" -Force
+          Copy-Item "$mhSrc/src/hook.c"        "$libs/minhook/src/" -Force
+          Copy-Item "$mhSrc/src/trampoline.c"  "$libs/minhook/src/" -Force
+          Copy-Item "$mhSrc/src/trampoline.h"  "$libs/minhook/src/" -Force
+          Copy-Item "$mhSrc/src/hde/*"         "$libs/minhook/src/hde/" -Recurse -Force
+
+          Write-Host "ImGui + MinHook fetched into $libs"
+          Get-ChildItem "$libs/imgui"   | Select-Object Name | Format-Table
+          Get-ChildItem "$libs/minhook" -Recurse | Select-Object FullName | Format-Table
+
       - name: Build IcarusInternal
         run: msbuild IcarusInternal/IcarusInternal.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
 
@@ -49,7 +104,7 @@ jobs:
 
           # Copy the exact maintained native outputs into the Electron bundle.
           Copy-Item "IcarusInjector/bin/Release/IcarusInjector.exe" "app/bin/IcarusInjector.exe"
-          Copy-Item "IcarusInjector/bin/Release/IcarusInternal.dll" "app/bin/IcarusInternal.dll"
+          Copy-Item "IcarusInternal/bin/Release/IcarusInternal.dll" "app/bin/IcarusInternal.dll"
 
           # Standalone native package
           Copy-Item "app/bin/IcarusInjector.exe" "release/"
