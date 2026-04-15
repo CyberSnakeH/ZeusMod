@@ -1,171 +1,282 @@
-# ZeusMod
+<h1 align="center">ZeusMod</h1>
 
 <p align="center">
-  <img src="Pictures/i1.png" width="280" alt="Injector desktop UI">
-  &nbsp;&nbsp;
-  <img src="Pictures/i2.png" width="600" alt="Runtime console and in-game overlay">
+  <strong>Internal trainer, native injector and Electron desktop companion for Icarus.</strong><br/>
+  <em>Patch-resilient · Reflection-driven · Windows x64</em>
 </p>
 
 <p align="center">
-  <img src="Pictures/i3.png" width="500" alt="Free Craft in action">
-</p>
-
-<p align="center">
-  <strong>Internal runtime module, desktop injector, and Electron companion app for Icarus.</strong>
-</p>
-
-<p align="center">
-  <a href="#overview">Overview</a> |
-  <a href="#features">Features</a> |
-  <a href="#architecture">Architecture</a> |
-  <a href="#build">Build</a> |
-  <a href="#usage">Usage</a> |
+  <a href="#features">Features</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#install">Install</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#build-from-source">Build</a> •
+  <a href="#architecture">Architecture</a> •
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+<p align="center">
+  <img alt="Version"  src="https://img.shields.io/badge/version-1.3.0-6e56cf">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20x64-0a84ff">
+  <img alt="Engine"   src="https://img.shields.io/badge/engine-UE%204.27-13aa52">
+  <img alt="License"  src="https://img.shields.io/badge/license-MIT-yellow">
+</p>
+
+---
+
 ## Overview
 
-ZeusMod is a Windows-only Icarus internal project composed of:
+**ZeusMod** is a research / single-player trainer for *Icarus*, built as a
+Windows-only internal module. It is structured around three native pieces and
+one desktop companion app:
 
-- `IcarusInternal`: the injected DLL responsible for runtime feature logic, UE object lookup, overlays, and pipe-based command handling
-- `IcarusInjector`: the native injector application used to attach the DLL to the game process
-- `app`: the Electron desktop companion UI used to detect the game, inject the DLL, manage toggles, and deliver app updates
-- `Shared`: shared enums, constants, and project types used by the native components
+| Component         | Role                                                                          |
+|-------------------|-------------------------------------------------------------------------------|
+| `IcarusInternal`  | Injected DLL — runtime hooks, UE reflection lookup, ImGui overlay, IPC pipe   |
+| `IcarusInjector`  | Standalone native injector — attaches the DLL into a running Icarus process   |
+| `app/`            | Electron desktop launcher — install detection, one-click inject, auto-update  |
+| `Shared/`         | Shared headers, enums and constants used by the native components             |
 
-The current runtime favors Unreal reflection and native function lookup wherever possible. Gameplay offsets are resolved at runtime when available, while the low-level Unreal bootstrap still relies on stable engine layout assumptions.
+The trainer favours **Unreal reflection** over hardcoded byte signatures: all
+`UFunction` entry points and `UPROPERTY` offsets are resolved at runtime by
+name via `UObjectLookup`. Most non-engine Icarus updates do not require a
+rebuild.
+
+---
 
 ## Features
 
-### Runtime Features
+### In-game features
 
-- God Mode
-- Infinite Stamina
-- Infinite Armor
-- Infinite Oxygen
-- No Hunger / Thirst
-- Free Craft
-- No Weight Limit
-- Speed Hack
-- Time Lock
+| Feature              | Description                                                            |
+|----------------------|------------------------------------------------------------------------|
+| God Mode             | Health stays full and write-back to `SetHealth` is patched out         |
+| Infinite Stamina     | Stamina stays at max while sprinting / climbing                        |
+| Infinite Armor       | Armor durability is held at max                                        |
+| Infinite Oxygen      | Oxygen stays at max underwater and at altitude                         |
+| Infinite Food        | Hunger stays satisfied                                                 |
+| Infinite Water       | Thirst stays satisfied                                                 |
+| Speed Hack           | Configurable movement multiplier (walk / run / crouch / swim / fly)    |
+| No Weight Limit      | `GetTotalWeight` patched to return `0`                                 |
+| Free Craft           | Crafts any recipe — even **0 / N** — without consuming materials       |
+| Time Lock            | Locks time of day to a configurable hour                               |
+| In-game ImGui Menu   | Bind: <kbd>N</kbd> to toggle menu, <kbd>F10</kbd> to unload the module |
 
-### Desktop App Features
+> Free Craft now works on recipes the player has **zero** ingredients for.
+> The `CanQueueItem`, `HasSufficientResource`, `GetResourceRecipeValidity`
+> and `CanSatisfyRecipeQueryInput` validation chain is fully bypassed,
+> the `DeployableTickSubsystem` active-processor list is auto-populated,
+> and outputs land in the correct deployable inventory.
 
-- Icarus install detection through Steam library discovery
-- Running-process detection for `Icarus-Win64-Shipping.exe`
+### Desktop app features
+
+- Auto-detects your Icarus install through the Steam library folders
+- Detects whether `Icarus-Win64-Shipping.exe` is currently running
 - One-click DLL injection from the desktop UI
-- GitHub release update checks with release notes, progress feedback, and installer handoff
-- English-only desktop UX and English-only in-game ImGui overlay
+- Live cheat toggles forwarded to the trainer over a named pipe
+  (`\\.\pipe\ZeusModPipe`)
+- GitHub Releases auto-update with release-note display, progress bar and
+  installer hand-off
+- Self-contained: ships with the latest `IcarusInternal.dll`,
+  `IcarusInjector.exe` and `inject.ps1` inside the installer
 
-## Architecture
+---
 
-```text
-ZeusMod/
-|- IcarusInjector/   # Native injector executable
-|- IcarusInternal/   # Injected DLL, overlays, runtime hooks, UE lookup
-|- Shared/           # Shared native headers and types
-|- app/              # Electron desktop app and auto-update UI
-|- Pictures/         # README screenshots
-|- release/          # CI packaging staging folder
-`- NotUsed/          # Archived tools, old trainer, dumps, and retired assets
-```
+## Screenshots
 
-### Native Runtime Flow
+<p align="center">
+  <img src="Pictures/i1.png" width="320" alt="ZeusMod desktop launcher"><br/>
+  <em>Desktop launcher (Electron) — install detection, inject, auto-update</em>
+</p>
 
-1. `IcarusInjector` launches and injects `IcarusInternal.dll`
-2. `IcarusInternal` initializes UE bootstrap lookup
-3. Runtime offsets and native functions are resolved through reflection/name lookup where available
-4. The DLL exposes a named pipe (`\\.\pipe\ZeusModPipe`) for external toggles
-5. The in-game overlay reads and writes trainer state live
+<p align="center">
+  <img src="Pictures/i2.png" width="640" alt="Runtime console and ImGui overlay"><br/>
+  <em>Runtime console + ImGui overlay attached to the game</em>
+</p>
 
-### Desktop App Flow
+<p align="center">
+  <img src="Pictures/i3.png" width="540" alt="Free Craft on a 0/N recipe"><br/>
+  <em>Free Craft accepting a recipe with zero materials in inventory</em>
+</p>
 
-1. The Electron app detects the local Steam install and the running Icarus process
-2. The user attaches to the game from the desktop UI
-3. The app forwards cheat toggles to the injected module through the pipe
-4. The app checks GitHub Releases for a newer installer and can download it with progress reporting
+---
 
-## Update System
+## Install
 
-The desktop app includes a built-in updater flow aimed at the packaged Electron build:
+### Recommended (end users)
 
-- checks the latest GitHub Release from `CyberSnakeH/ZeusMod`
-- compares the latest tag against the local app version
-- surfaces release notes in-app
-- downloads the preferred installer executable with progress feedback
-- launches the installer and exits the current app instance
+1. Grab the latest `ZeusMod-Setup-1.3.0.exe` from the
+   [Releases](https://github.com/CyberSnakeH/ZeusMod/releases) page.
+2. Run the installer (UAC elevation required).
+3. Launch **ZeusMod** from the desktop shortcut or the Start Menu.
+4. Start *Icarus*, load into a prospect, then click **Inject** in ZeusMod.
 
-This is intentionally separate from the injected runtime. Native binaries are shipped alongside the app package and bundled into release assets.
+The installer ships the trainer DLL, the native injector and the PowerShell
+remote-thread injector script — no separate downloads required.
 
-## Build
+---
+
+## Usage
+
+1. Launch *Icarus* and load into a prospect.
+2. Open ZeusMod and wait for *Game running* to turn green.
+3. Click **Inject** — the trainer attaches to the live process.
+4. Toggle features either:
+   - from the **desktop UI** (live IPC over the pipe), or
+   - from the **in-game ImGui overlay** (<kbd>N</kbd> to open).
+5. Press <kbd>F10</kbd> in-game to **unload** the module cleanly.
+
+> ZeusMod is intended for **single-player / private play** and reverse
+> engineering research only. Do not use it on official multiplayer servers.
+
+---
+
+## Build from source
 
 ### Requirements
 
-- Windows 10 or Windows 11
-- Visual Studio 2022 or newer with Desktop development for C++
-- Node.js 20+ for the Electron app
+- Windows 10 / 11 (x64)
+- Visual Studio 2022 with the **Desktop development with C++** workload
+- Windows 10 SDK (any recent revision)
+- Node.js 20+ (for the Electron app)
 
-### Native Solution
-
-Open:
+### Native solution
 
 ```powershell
+git clone https://github.com/CyberSnakeH/ZeusMod.git
+cd ZeusMod
 start IcarusMod.sln
 ```
 
-Active solution projects:
-
-- `Shared`
-- `IcarusInjector`
-- `IcarusInternal`
-
+Active projects: `Shared`, `IcarusInjector`, `IcarusInternal`.
 Build configuration:
 
 ```text
 Release | x64
 ```
 
-### Electron App
+Outputs land in `bin/Release/`:
 
-From the `app` directory:
+- `IcarusInternal.dll` — the injected trainer
+- `IcarusInjector.exe` — the standalone external injector
+
+### Electron app
 
 ```powershell
+cd app
 npm install
 npm run dist
 ```
 
-The packaged app expects the injector and internal DLL to be present in `app/bin/`.
+The packaged installer (`ZeusMod-Setup-1.3.0.exe`) is written to
+`app/dist/`. The build expects the latest `IcarusInternal.dll` and
+`IcarusInjector.exe` inside `app/bin/`, and `inject.ps1` inside
+`app/scripts/`.
 
-## Usage
+To refresh those after a native rebuild:
 
-1. Launch Icarus and load into a prospect.
-2. Start the desktop app or run `IcarusInjector.exe`.
-3. Attach to the running game.
-4. Toggle features from the desktop app or the in-game overlay.
-5. Use `N` to open or close the ImGui overlay.
-6. Use `F10` to unload the module.
+```powershell
+copy bin\Release\IcarusInternal.dll  app\bin\IcarusInternal.dll
+copy bin\Release\IcarusInjector.exe  app\bin\IcarusInjector.exe
+```
 
-## Runtime Notes
+---
 
-- The project is intended for local/private play and research scenarios.
-- The desktop app, native injector, and internal DLL currently target Windows x64.
-- The runtime resolver already covers a large share of gameplay properties and native functions through Unreal reflection.
-- Some low-level bootstrap and engine-structure assumptions still remain in the UE lookup layer, which is expected for this style of internal tooling.
+## Architecture
 
-## Repository Hygiene
+```text
+ZeusMod/
+├── IcarusInjector/      # Native external injector (CreateRemoteThread + LoadLibrary)
+├── IcarusInternal/      # Injected DLL: hooks, overlay, UObjectLookup, IPC pipe
+├── Shared/              # Shared headers, enums, project types
+├── app/                 # Electron desktop launcher + auto-updater
+│   ├── main.js
+│   ├── preload.js
+│   ├── src/             # Renderer (HTML / CSS / JS)
+│   ├── bin/             # Bundled IcarusInternal.dll + IcarusInjector.exe
+│   └── scripts/         # inject.ps1 (PowerShell remote-thread injector)
+├── Pictures/            # README screenshots
+├── release/             # CI staging folder
+└── NotUsed/             # Archived tools, retired trainer, old SDK dumps
+```
 
-Legacy material that is no longer part of the active build has been moved to [`NotUsed/`](NotUsed):
+### Native runtime flow
+
+1. `IcarusInjector` (or the Electron app) launches and injects
+   `IcarusInternal.dll` into `Icarus-Win64-Shipping.exe`.
+2. `IcarusInternal` initializes `UObjectLookup`, which AOB-scans for
+   `GUObjectArray` and `FNamePool`.
+3. All UFunction entry points and UPROPERTY offsets used by the trainer are
+   resolved by **name**, walking thunks to their C++ implementations via
+   HDE64 disassembly.
+4. MinHook installs detours on the resolved entry points.
+5. The DLL exposes a named pipe (`\\.\pipe\ZeusModPipe`) for the desktop
+   app to push live cheat toggles.
+6. The in-game ImGui overlay reads/writes trainer state directly.
+
+### Desktop app flow
+
+1. The launcher discovers your Steam install and resolves the Icarus
+   install directory through the AppManifest.
+2. It polls for the `Icarus-Win64-Shipping.exe` process state.
+3. On **Inject**, it spawns `inject.ps1` to perform a remote-thread
+   `LoadLibraryW` against the running game.
+4. Cheat toggles in the UI are sent over the named pipe.
+5. The updater queries the latest GitHub Release, compares versions, shows
+   release notes, downloads the installer with progress, and hands off.
+
+---
+
+## Patch resilience
+
+ZeusMod is designed to survive most Icarus content updates without a
+rebuild:
+
+- **UFunction lookup by name** — `CanQueueItem`, `HasSufficientResource`,
+  `Process`, `AddProcessingRecipe`, `ConsumeItem`, `GetItemCount`,
+  `FindItemCountByType`, `SetHealth`, … all resolved by their UE
+  reflection name. The thunks are walked to their C++ impls at runtime.
+- **UPROPERTY offsets by name** — `Health`, `MaxHealth`, `Stamina`,
+  `Oxygen`, `Food`, `Water`, `MaxWalkSpeed`, `TimeOfDay`,
+  `InventoryComponent`, … all resolved through the `FField` chain.
+- **UClass pointers** cached at runtime by class name.
+- **DeployableTickSubsystem** instance located through a runtime
+  `GObjects` scan.
+- Patch addresses are validated to lie inside the module code range
+  before any byte write.
+
+A few low-level UE 4.27 layout assumptions remain (e.g. `FUObjectItem`
+serial-number offset, `UStruct.Children` offset, the unreflected
+`+0x60` active-processor `TArray` inside `DeployableTickSubsystem`).
+These are stable on every patch within UE 4.27 but would need
+re-validation if Icarus moved to UE5.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full per-version notes.
+
+---
+
+## Repository hygiene
+
+Legacy material that is no longer part of the active build lives under
+[`NotUsed/`](NotUsed):
 
 - archived SDK dumps
-- retired tools
-- legacy trainer project
-- temporary third-party source drops
+- retired tools (memory dumpers, AOB scanner, UE4SS injector)
+- the legacy trainer project
+- third-party source drops kept for reference
 
-This keeps the active tree focused on the maintained injector, internal runtime, and desktop app.
+The active tree only contains the maintained injector, internal runtime,
+and desktop launcher.
 
-## Changelog
+---
 
-Project history is tracked in [CHANGELOG.md](CHANGELOG.md).
+## License
+
+MIT — see [LICENSE](LICENSE) if present, otherwise the package metadata.
 
 ## Disclaimer
 
-This repository is provided for educational and research purposes only. Use at your own risk. It is not affiliated with RocketWerkz.
+This project is provided **strictly for educational and reverse-engineering
+research purposes**. It is not affiliated with, endorsed by, or sponsored
+by RocketWerkz. Use it only in single-player or private sessions you
+control. You are solely responsible for how you use it.

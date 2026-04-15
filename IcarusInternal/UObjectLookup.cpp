@@ -836,6 +836,27 @@ uintptr_t GetObjectByIndex(int32_t index) {
     return obj;
 }
 
+int32_t GetObjectSerialNumberByIndex(int32_t index) {
+    if (!s_gobjectsAddr || index < 0) return 0;
+
+    uintptr_t arrayBase = 0;
+    if (!SafeRead(s_gobjectsAddr + OFF_OBJ_ARRAY_OBJECTS, arrayBase) || !arrayBase)
+        return 0;
+
+    int32_t chunkIdx   = index / OBJECTS_PER_CHUNK;
+    int32_t withinChunk = index % OBJECTS_PER_CHUNK;
+
+    uintptr_t chunk = 0;
+    if (!SafeRead(arrayBase + chunkIdx * sizeof(uintptr_t), chunk) || !chunk) return 0;
+
+    uintptr_t itemAddr = chunk + static_cast<uintptr_t>(withinChunk) * FUOBJECT_ITEM_SIZE;
+    int32_t serial = 0;
+    // FUObjectItem layout: { Object*@+0, Flags@+8, ClusterRootIndex@+0xC,
+    // SerialNumber@+0x10 }, size 24 (FUOBJECT_ITEM_SIZE).
+    if (!SafeRead(itemAddr + 0x10, serial)) return 0;
+    return serial;
+}
+
 // === Function / class lookup ===============================================
 
 uintptr_t FindFunctionInClass(uintptr_t uclassAddr, const char* funcName) {

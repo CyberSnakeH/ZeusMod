@@ -1,6 +1,6 @@
 {
   "name": "zeusmod",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "ZeusMod desktop launcher and updater for Icarus",
   "main": "main.js",
   "author": "CyberSnake",
@@ -26,7 +26,7 @@
         }
       ],
       "signAndEditExecutable": false,
-      "icon": "../IcarusInjector/zeusmod.ico"
+      "icon": "src/assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -34,7 +34,10 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ZeusMod"
+      "shortcutName": "ZeusMod",
+      "installerIcon": "src/assets/icon.ico",
+      "uninstallerIcon": "src/assets/icon.ico",
+      "installerHeaderIcon": "src/assets/icon.ico"
     },
     "publish": [
       {

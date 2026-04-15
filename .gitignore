@@ -45,7 +45,6 @@ NotUsed/
 
 # IDE
 .vs/
-.claude/
 *.suo
 *.sdf
 *.opensdf

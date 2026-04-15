@@ -28,6 +28,12 @@ bool IsInitialized();
 int32_t GetObjectCount();
 uintptr_t GetObjectByIndex(int32_t index);
 
+// Read the SerialNumber field of the FUObjectItem at the given index.
+// Used to construct a valid FWeakObjectPtr value { ObjectIndex, SerialNumber }
+// that will pass FWeakObjectPtr::Get()'s serial check when the game later
+// dereferences it. Returns 0 on any read failure or out-of-range index.
+int32_t GetObjectSerialNumberByIndex(int32_t index);
+
 // === Name reading ===
 
 // Resolve an FName at the given memory location to a string. Empty string

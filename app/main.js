@@ -48,7 +48,7 @@ function createWindow() {
             contextIsolation: true,
             nodeIntegration: false
         },
-        icon: path.join(__dirname, 'src/assets/icon.png')
+        icon: path.join(__dirname, 'src/assets/icon.ico')
     });
 
     mainWindow.loadFile('src/index.html');
