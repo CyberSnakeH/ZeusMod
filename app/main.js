@@ -454,7 +454,11 @@ ipcMain.handle('update:install', async () => {
         });
 
         setTimeout(() => {
-            execFile(installerPath, [], { detached: true, windowsHide: true });
+            const child = execFile(installerPath, [], {
+                detached: true,
+                stdio: 'ignore'
+            });
+            child.unref();
             app.quit();
         }, 400);
 

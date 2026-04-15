@@ -4,6 +4,23 @@ All notable changes to ZeusMod are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-04-15
+
+### Fixed
+
+- In-app updater: clicking **Download and install** now actually launches
+  the downloaded NSIS installer instead of silently killing it. The previous
+  build called `execFile(installer, [], { detached: true, windowsHide: true })`
+  immediately followed by `app.quit()`, which:
+  - left the child's stdio pipes attached to the parent (`stdio: 'pipe'` by
+    default), so the installer process was torn down with the Electron app,
+  - and applied `CREATE_NO_WINDOW` (`windowsHide: true`) on a GUI installer,
+    which can suppress the NSIS wizard window.
+  The handler now uses `stdio: 'ignore'` and calls `child.unref()` so the
+  installer survives the parent quitting and its UAC + wizard UI appears
+  normally. After clicking **Finish**, the NSIS *Run ZeusMod* checkbox
+  (default on) relaunches the new version.
+
 ## [1.3.1] - 2026-04-15
 
 ### Fixed
