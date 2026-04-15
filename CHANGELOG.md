@@ -4,6 +4,24 @@ All notable changes to ZeusMod are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-04-15
+
+### Fixed
+
+- The packaged `ZeusMod.exe` now actually carries the ZeusMod icon. The
+  previous build set `signAndEditExecutable: false` in the electron-builder
+  config, which silently disabled `rcedit` and prevented the icon from
+  being embedded into the executable resource section. Removing that flag
+  lets electron-builder embed the icon, so the desktop shortcut, taskbar,
+  Start Menu and Explorer file icon all show ZeusMod artwork.
+- The bundled `.ico` is now a true multi-resolution icon
+  (16 / 24 / 32 / 48 / 64 / 128 / 256), so Windows picks a crisp size in
+  every context instead of downscaling 256 → 16.
+
+### Changed
+
+- Bumped desktop app to **1.3.1**.
+
 ## [1.3.0] - 2026-04-15
 
 ### Added
