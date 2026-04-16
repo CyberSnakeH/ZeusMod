@@ -4,6 +4,36 @@ All notable changes to ZeusMod are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.11] - 2026-04-17
+
+### Highlights
+
+- **End-to-end test of the new in-app updater** — 1.4.11 is the first
+  release that existing 1.4.1 installs are expected to pick up and
+  install **fully automatically** (download → silent install →
+  auto-relaunch) via `electron-updater` and the silent one-click NSIS
+  package shipped in 1.4.1.
+- **`electron-builder` bumped 25 → 26.8.1**, which pulls in fixed
+  versions of `tar`, `cacache`, `glob`, `@electron/rebuild`, and
+  friends, eliminating **11 of 12 `npm audit` advisories** in the
+  build tree (all of them dev-only transitive deps).
+- **Release notes are now generated from `CHANGELOG.md`** instead of
+  being hardcoded in the workflow. The CI reads the `## [X.Y.Z]`
+  section that matches the pushed tag and uses it as the GitHub
+  release body, so future releases always advertise the actual
+  changes that shipped.
+- Release body additionally describes the three asset families
+  (installer, updater metadata, standalone zip) so users don't try to
+  run `latest.yml` or the `.blockmap`.
+
+### Known
+
+- The single remaining `npm audit` advisory is against **Electron 33**
+  itself (multiple moderate / high CVEs fixed in Electron 38.8.6 /
+  39.8.5). Bumping Electron is a semver-major update and is deferred
+  to a dedicated release rather than bundled here, so that the
+  updater flow can be validated against a minimally-changed build.
+
 ## [1.4.1] - 2026-04-17
 
 ### Changed — Updater (critical fix)

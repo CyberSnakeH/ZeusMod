@@ -117,6 +117,50 @@ jobs:
           cd ..
         shell: pwsh
 
+      - name: Extract release notes from CHANGELOG
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $raw = Get-Content CHANGELOG.md -Raw
+          $start = $raw.IndexOf("## [$version]")
+          if ($start -lt 0) {
+              Write-Host "No CHANGELOG entry for $version, using fallback body"
+              $section = "_No changelog entry for this version._"
+          } else {
+              $after = $raw.Substring($start)
+              $eol = $after.IndexOf("`n")
+              $tail = $after.Substring($eol + 1)
+              $next = $tail.IndexOf("`n## [")
+              if ($next -gt 0) {
+                  $section = $tail.Substring(0, $next).Trim()
+              } else {
+                  $section = $tail.Trim()
+              }
+          }
+          $body = @"
+## ZeusMod ${{ github.ref_name }}
+
+$section
+
+### How to install
+
+1. Download **ZeusMod-Setup-${{ github.ref_name }}.exe** below.
+2. Run it — install is silent, no UAC prompt, ZeusMod auto-launches when finished.
+3. Launch Icarus, load into a prospect, click **ATTACH TO ICARUS** in the launcher.
+4. Press **N** in-game for the overlay.
+
+### Assets
+
+- `ZeusMod-Setup-*.exe` — full installer (Windows, per-user, silent)
+- `latest.yml` + `*.exe.blockmap` — metadata for the in-app auto-updater (do not download manually)
+- `ZeusMod-Standalone-*.zip` — just the native `IcarusInjector.exe` + `IcarusInternal.dll` for advanced users
+
+> Single-player / private sessions only. For educational and research use.
+"@
+          $body | Out-File -FilePath release_notes.md -Encoding utf8 -NoNewline
+          Write-Host "=== release_notes.md ==="
+          Get-Content release_notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -125,25 +169,6 @@ jobs:
             app/dist/ZeusMod-Setup-*.exe
             app/dist/ZeusMod-Setup-*.exe.blockmap
             app/dist/latest.yml
-          body: |
-            ## ZeusMod ${{ github.ref_name }}
-
-            ### Highlights
-            - God Mode
-            - Infinite Stamina / Armor / Oxygen
-            - No Hunger / Thirst
-            - Free Craft
-            - No Weight Limit
-            - Speed Hack
-            - Time Lock
-
-            ### How to Use
-            1. Extract the zip.
-            2. Launch Icarus and enter a prospect.
-            3. Run `IcarusInjector.exe` as Administrator.
-            4. Click **ATTACH TO ICARUS**.
-            5. Use the desktop app or in-game overlay to manage features.
-
-            > Run as Administrator. Intended for solo or private sessions only.
+          body_path: release_notes.md
           draft: false
           prerelease: false

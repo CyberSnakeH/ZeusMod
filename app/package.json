@@ -1,6 +1,6 @@
 {
   "name": "zeusmod",
-  "version": "1.4.1",
+  "version": "1.4.11",
   "description": "ZeusMod desktop launcher and updater for Icarus",
   "main": "main.js",
   "author": "CyberSnake",
@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^26.8.1"
   },
   "build": {
     "appId": "com.cybersnake.zeusmod",
@@ -25,7 +25,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "src/assets/icon.ico"
@@ -61,12 +63,16 @@
       {
         "from": "bin/",
         "to": "bin/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "scripts/",
         "to": "scripts/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   }
