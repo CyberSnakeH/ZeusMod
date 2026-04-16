@@ -123,6 +123,8 @@ jobs:
           files: |
             ZeusMod-Standalone-${{ github.ref_name }}.zip
             app/dist/ZeusMod-Setup-*.exe
+            app/dist/ZeusMod-Setup-*.exe.blockmap
+            app/dist/latest.yml
           body: |
             ## ZeusMod ${{ github.ref_name }}
 

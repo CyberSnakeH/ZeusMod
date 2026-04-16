@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { execFile, exec } = require('child_process');
 const fs = require('fs');
@@ -100,205 +101,118 @@ function scheduleUpdateChecks() {
     }, UPDATE_CHECK_INTERVAL_MS);
 }
 
-function normalizeVersion(version) {
-    return String(version || '')
-        .trim()
-        .replace(/^v/i, '')
-        .replace(/[^\d.].*$/, '');
-}
-
-function isNewerVersion(latest, current) {
-    const lhs = normalizeVersion(latest).split('.').map((value) => Number(value) || 0);
-    const rhs = normalizeVersion(current).split('.').map((value) => Number(value) || 0);
-    const max = Math.max(lhs.length, rhs.length, 3);
-
-    for (let i = 0; i < max; i++) {
-        const l = lhs[i] || 0;
-        const r = rhs[i] || 0;
-        if (l > r) return true;
-        if (l < r) return false;
-    }
-    return false;
-}
-
 function normalizeNotes(notes) {
+    if (Array.isArray(notes)) {
+        return notes.map((n) => n?.note || '').filter(Boolean).join('\n\n').trim()
+            || 'Bug fixes, quality improvements, and packaging updates.';
+    }
     const text = String(notes || '').replace(/\r/g, '').trim();
     return text || 'Bug fixes, quality improvements, and packaging updates.';
 }
 
-function pickInstallerAsset(release) {
-    const assets = Array.isArray(release.assets) ? release.assets : [];
-    const executables = assets.filter((asset) => {
-        const name = String(asset.name || '').toLowerCase();
-        return name.endsWith('.exe') && !name.endsWith('.blockmap') && !name.includes('portable');
-    });
-
-    const setupMatch = executables.find((asset) =>
-        String(asset.name || '').toLowerCase().includes('setup')
-    );
-    return setupMatch || executables[0] || null;
-}
-
-function requestJson(url, headers = {}) {
-    return new Promise((resolve, reject) => {
-        const request = https.get(url, { headers }, (response) => {
-            if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                response.resume();
-                resolve(requestJson(response.headers.location, headers));
-                return;
-            }
-
+function fetchReleaseNotesFromGitHub(version) {
+    return new Promise((resolve) => {
+        const tag = `v${String(version).replace(/^v/i, '')}`;
+        const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${tag}`;
+        const req = https.get(url, { headers: { 'User-Agent': UPDATE_USER_AGENT, Accept: 'application/vnd.github+json' } }, (res) => {
+            if (res.statusCode && res.statusCode >= 400) { res.resume(); return resolve(null); }
             let data = '';
-            response.on('data', (chunk) => {
-                data += chunk;
-            });
-            response.on('end', () => {
-                if (response.statusCode && response.statusCode >= 400) {
-                    reject(new Error(`HTTP ${response.statusCode}`));
-                    return;
-                }
-
-                try {
-                    resolve(JSON.parse(data));
-                } catch (error) {
-                    reject(error);
-                }
+            res.on('data', (c) => { data += c; });
+            res.on('end', () => {
+                try { resolve(JSON.parse(data)); } catch { resolve(null); }
             });
         });
-
-        request.on('error', reject);
+        req.on('error', () => resolve(null));
+        req.setTimeout(10000, () => { req.destroy(); resolve(null); });
     });
 }
+
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.allowPrerelease = false;
+autoUpdater.allowDowngrade = false;
+
+autoUpdater.on('checking-for-update', () => {
+    setUpdateState({ status: 'checking', progress: 0, error: null });
+});
+
+autoUpdater.on('update-available', async (info) => {
+    const latestVersion = String(info?.version || APP_VERSION);
+    const release = await fetchReleaseNotesFromGitHub(latestVersion);
+    setUpdateState({
+        status: 'available',
+        latestVersion,
+        releaseTag: `v${latestVersion}`,
+        notes: normalizeNotes(release?.body || info?.releaseNotes),
+        releaseUrl: release?.html_url || `https://github.com/${GITHUB_REPO}/releases/tag/v${latestVersion}`,
+        progress: 0,
+        checkedAt: new Date().toISOString(),
+        error: null
+    });
+});
+
+autoUpdater.on('update-not-available', (info) => {
+    setUpdateState({
+        status: 'up-to-date',
+        latestVersion: String(info?.version || APP_VERSION),
+        releaseTag: `v${info?.version || APP_VERSION}`,
+        progress: 0,
+        checkedAt: new Date().toISOString(),
+        error: null
+    });
+});
+
+autoUpdater.on('download-progress', (progress) => {
+    setUpdateState({
+        status: 'downloading',
+        progress: Math.min(100, Math.max(1, Math.round(progress?.percent || 0)))
+    });
+});
+
+autoUpdater.on('update-downloaded', () => {
+    setUpdateState({ status: 'downloaded', progress: 100, error: null });
+});
+
+autoUpdater.on('error', (error) => {
+    setUpdateState({
+        status: 'error',
+        progress: 0,
+        error: error?.message || String(error) || 'Update error.',
+        checkedAt: new Date().toISOString()
+    });
+});
 
 async function checkForUpdates() {
     if (updateCheckInFlight) return updateCheckInFlight;
 
     updateCheckInFlight = (async () => {
-        setUpdateState({
-            status: 'checking',
-            progress: 0,
-            error: null
-        });
-
-        try {
-            const release = await requestJson(GITHUB_LATEST_API, {
-                'User-Agent': UPDATE_USER_AGENT,
-                Accept: 'application/vnd.github+json'
-            });
-
-            const latestVersion = normalizeVersion(release.tag_name);
-            if (!latestVersion) {
-                throw new Error('Invalid release version received from GitHub.');
-            }
-
-            const installerAsset = pickInstallerAsset(release);
-            const commonPatch = {
-                latestVersion,
-                releaseTag: String(release.tag_name || `v${latestVersion}`),
-                notes: normalizeNotes(release.body),
-                releaseUrl: release.html_url || GITHUB_RELEASES_URL,
-                downloadUrl: installerAsset?.browser_download_url || null,
-                fileName: installerAsset?.name || null,
-                checkedAt: new Date().toISOString(),
-                error: null
-            };
-
-            if (isNewerVersion(latestVersion, APP_VERSION)) {
-                return setUpdateState({
-                    ...commonPatch,
-                    status: 'available',
-                    progress: 0
-                });
-            }
-
-            return setUpdateState({
-                ...commonPatch,
+        if (!app.isPackaged) {
+            setUpdateState({
                 status: 'up-to-date',
-                downloadUrl: null,
-                fileName: null,
-                progress: 0
+                latestVersion: APP_VERSION,
+                releaseTag: `v${APP_VERSION}`,
+                checkedAt: new Date().toISOString(),
+                progress: 0,
+                error: null
             });
+            return serializeUpdateState();
+        }
+        try {
+            await autoUpdater.checkForUpdates();
         } catch (error) {
-            return setUpdateState({
+            setUpdateState({
                 status: 'error',
                 checkedAt: new Date().toISOString(),
                 progress: 0,
-                error: error.message || 'Unable to check for updates.'
+                error: error?.message || 'Unable to check for updates.'
             });
         } finally {
             updateCheckInFlight = null;
         }
+        return serializeUpdateState();
     })();
 
     return updateCheckInFlight;
-}
-
-function downloadFile(url, destination) {
-    return new Promise((resolve, reject) => {
-        const temporaryDestination = `${destination}.download`;
-
-        try {
-            if (fs.existsSync(temporaryDestination)) fs.unlinkSync(temporaryDestination);
-            if (fs.existsSync(destination)) fs.unlinkSync(destination);
-        } catch {}
-
-        const request = https.get(url, { headers: { 'User-Agent': UPDATE_USER_AGENT } }, (response) => {
-            if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                response.resume();
-                resolve(downloadFile(response.headers.location, destination));
-                return;
-            }
-
-            if (response.statusCode && response.statusCode >= 400) {
-                reject(new Error(`HTTP ${response.statusCode}`));
-                return;
-            }
-
-            const totalBytes = Number(response.headers['content-length'] || 0);
-            let receivedBytes = 0;
-            const fileStream = fs.createWriteStream(temporaryDestination);
-
-            response.on('data', (chunk) => {
-                receivedBytes += chunk.length;
-                if (totalBytes > 0) {
-                    setUpdateState({
-                        status: 'downloading',
-                        progress: Math.min(100, Math.max(1, Math.round((receivedBytes / totalBytes) * 100)))
-                    });
-                }
-            });
-
-            response.pipe(fileStream);
-
-            fileStream.on('finish', () => {
-                fileStream.close(() => {
-                    fs.rename(temporaryDestination, destination, (renameError) => {
-                        if (renameError) {
-                            reject(renameError);
-                            return;
-                        }
-                        resolve(destination);
-                    });
-                });
-            });
-
-            fileStream.on('error', (streamError) => {
-                try {
-                    fileStream.close(() => {
-                        if (fs.existsSync(temporaryDestination)) fs.unlinkSync(temporaryDestination);
-                    });
-                } catch {}
-                reject(streamError);
-            });
-        });
-
-        request.on('error', (error) => {
-            try {
-                if (fs.existsSync(temporaryDestination)) fs.unlinkSync(temporaryDestination);
-            } catch {}
-            reject(error);
-        });
-    });
 }
 
 function findSteamPath() {
@@ -430,44 +344,35 @@ ipcMain.handle('update:openReleasePage', async () => {
 });
 
 ipcMain.handle('update:install', async () => {
-    if (!updateState.downloadUrl) {
-        return { success: false, error: 'No downloadable installer is available for this release.' };
+    if (!app.isPackaged) {
+        return { success: false, error: 'Updates only work in the packaged app.' };
+    }
+    if (updateState.status !== 'available' && updateState.status !== 'downloaded' && updateState.status !== 'error') {
+        return { success: false, error: `Not ready to install (status: ${updateState.status}).` };
     }
 
     try {
-        const tempDir = path.join(os.tmpdir(), 'ZeusMod');
-        fs.mkdirSync(tempDir, { recursive: true });
-        const fileName = updateState.fileName || `${APP_NAME}-Setup-${updateState.latestVersion}.exe`;
-        const installerPath = path.join(tempDir, fileName);
-
-        setUpdateState({
-            status: 'downloading',
-            progress: 0,
-            error: null
-        });
-
-        await downloadFile(updateState.downloadUrl, installerPath);
-        setUpdateState({
-            status: 'downloaded',
-            progress: 100,
-            error: null
-        });
-
+        if (updateState.status !== 'downloaded') {
+            setUpdateState({ status: 'downloading', progress: 0, error: null });
+            await autoUpdater.downloadUpdate();
+        }
         setTimeout(() => {
-            const child = execFile(installerPath, [], {
-                detached: true,
-                stdio: 'ignore'
-            });
-            child.unref();
-            app.quit();
-        }, 400);
-
+            try {
+                autoUpdater.quitAndInstall(true, true);
+            } catch (err) {
+                setUpdateState({
+                    status: 'error',
+                    progress: 0,
+                    error: err?.message || 'Failed to launch the installer.'
+                });
+            }
+        }, 600);
         return { success: true };
     } catch (error) {
         setUpdateState({
             status: 'error',
             progress: 0,
-            error: error.message || 'Failed to download the update.'
+            error: error?.message || 'Failed to download the update.'
         });
         return { success: false, error: error.message || 'Failed to download the update.' };
     }

@@ -4,6 +4,35 @@ All notable changes to ZeusMod are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-04-17
+
+### Changed — Updater (critical fix)
+
+- Replaced the custom GitHub-releases updater with `electron-updater`.
+  The previous implementation downloaded the installer and spawned it
+  as a detached child process, but the install wizard often never
+  became visible (UAC or wizard interactions), leaving the app stuck
+  on "Restarting..." without actually updating.
+- NSIS installer switched to **silent one-click** mode:
+  - `oneClick: true` (no wizard pages)
+  - `perMachine: false` (installs to `%LOCALAPPDATA%\Programs\ZeusMod`,
+    no UAC prompt)
+  - `runAfterFinish: true` (app auto-launches after install)
+- CI now publishes `latest.yml` + installer blockmap alongside the
+  installer so `electron-updater` can discover the latest release and
+  support differential downloads.
+- `update:install` IPC now calls `autoUpdater.downloadUpdate()` +
+  `autoUpdater.quitAndInstall(isSilent=true, isForceRunAfter=true)` —
+  the install is silent and the app re-launches automatically.
+
+### Migration note
+
+- Users already running v1.3.x or v1.4.0 must perform **one last
+  manual download** of `ZeusMod-Setup-1.4.1.exe` from the Releases
+  page (the old in-app updater cannot reliably hand off to the new
+  installer). After installing 1.4.1 manually, every subsequent
+  update is fully automatic.
+
 ## [1.4.0] - 2026-04-17
 
 ### Added — Survival

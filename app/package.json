@@ -1,6 +1,6 @@
 {
   "name": "zeusmod",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "ZeusMod desktop launcher and updater for Icarus",
   "main": "main.js",
   "author": "CyberSnake",
@@ -9,6 +9,9 @@
     "start": "electron .",
     "build": "electron-builder",
     "dist": "electron-builder --win nsis --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -28,12 +31,14 @@
       "icon": "src/assets/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "allowElevation": true,
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "ZeusMod",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
       "installerIcon": "src/assets/icon.ico",
       "uninstallerIcon": "src/assets/icon.ico",
       "installerHeaderIcon": "src/assets/icon.ico"
