@@ -1,6 +1,7 @@
 #include "Trainer.h"
 #include "UE4.h"
 #include "UObjectLookup.h"
+#include "Logger.h"
 #include "libs/minhook/include/MinHook.h"
 #include <cmath>
 #include <cstring>
@@ -90,7 +91,7 @@ uintptr_t ResolveNativeOrAob(const char* className, const char* fnName,
     if (UObjectLookup::IsInitialized()) {
         uintptr_t addr = UObjectLookup::FindNativeFunction(className, fnName);
         if (addr) {
-            printf("[RESOLVE] %s: name lookup -> 0x%p\n", logName, reinterpret_cast<void*>(addr));
+            LOG_RESOLVE("%s: name lookup -> 0x%p", logName, reinterpret_cast<void*>(addr));
             return addr;
         }
     }
@@ -98,12 +99,12 @@ uintptr_t ResolveNativeOrAob(const char* className, const char* fnName,
     if (aob && *aob) {
         uintptr_t hit = UE4::PatternScan(moduleBase, moduleSize, aob);
         if (hit) {
-            printf("[RESOLVE] %s: AOB -> 0x%p\n", logName, reinterpret_cast<void*>(hit));
+            LOG_RESOLVE("%s: AOB -> 0x%p", logName, reinterpret_cast<void*>(hit));
             return hit;
         }
     }
 
-    printf("[RESOLVE] %s: runtime resolution failed\n", logName);
+    LOG_RESOLVE("%s: runtime resolution failed", logName);
     return 0;
 }
 
@@ -111,12 +112,12 @@ uintptr_t ResolveNativeOnly(const char* className, const char* fnName, const cha
     if (UObjectLookup::IsInitialized()) {
         uintptr_t addr = UObjectLookup::FindNativeFunction(className, fnName);
         if (addr) {
-            printf("[RESOLVE] %s: name lookup -> 0x%p\n", logName, reinterpret_cast<void*>(addr));
+            LOG_RESOLVE("%s: name lookup -> 0x%p", logName, reinterpret_cast<void*>(addr));
             return addr;
         }
     }
 
-    printf("[RESOLVE] %s: name lookup failed\n", logName);
+    LOG_RESOLVE("%s: name lookup failed", logName);
     return 0;
 }
 
@@ -160,6 +161,13 @@ static FnCanProcess           g_origCanProcess                 = nullptr;
 static FnInvCountQuery        g_origFindItemCountByType        = nullptr;
 static FnInvCountQuery        g_origGetItemCount               = nullptr;
 static FnUEThunk              g_origAddProcessingRecipeThunk   = nullptr;
+// Talent UI refresh hooks — these are UFunction thunks on
+// TalentControllerComponent. Hooking them lets us clamp point fields on
+// the Model right before the game propagates state to the UI widget.
+static FnUEThunk              g_origTriggerModelStateRefresh   = nullptr;
+static FnUEThunk              g_origBPForceRefresh             = nullptr;
+static FnUEThunk              g_origOnModelViewChanged         = nullptr;
+static FnUEThunk              g_origNativeModelStateChanged    = nullptr;
 // Generic-return-typed probe signature for newly discovered candidates we
 // want to observe (and possibly force) without knowing their exact return
 // type. uintptr_t covers bool (low byte), int (low 32) and pointer (full)
@@ -450,8 +458,7 @@ bool __fastcall HookCanSatisfyRecipeInput(void* self, void* input, int multiplie
         bool origResult = g_origCanSatisfyRecipeInput(self, input, multiplier, inventories, currentAmount);
         s_craftValidationDepth--;
         if (s_logCanSatisfyCount++ < kMaxHookLogPerHook)
-            printf("[HOOK] CanSatisfyRecipeInput#%d caller=+0x%llX self=%p input=%p mult=%d orig=%d -> 1\n",
-                s_logCanSatisfyCount, (unsigned long long)RelCaller(ret), self, input, multiplier,
+            LOG_HOOK("CanSatisfyRecipeInput#%d caller=+0x%llX self=%p input=%p mult=%d orig=%d -> 1", s_logCanSatisfyCount, (unsigned long long)RelCaller(ret), self, input, multiplier,
                 (int)origResult);
         if (!s_dumpedCanSatisfyCtx) {
             s_dumpedCanSatisfyCtx = true;
@@ -513,8 +520,7 @@ bool __fastcall HookCanQueueItem(void* self, void* recipeToQueue, void* inventor
         }
 
         if (s_logCanQueueCount++ < kMaxHookLogPerHook)
-            printf("[HOOK] CanQueueItem#%d caller=+0x%llX self=%p recipe=%p inv=%p orig=%d -> 1\n",
-                s_logCanQueueCount, (unsigned long long)RelCaller(ret), self, recipeToQueue, inventories,
+            LOG_HOOK("CanQueueItem#%d caller=+0x%llX self=%p recipe=%p inv=%p orig=%d -> 1", s_logCanQueueCount, (unsigned long long)RelCaller(ret), self, recipeToQueue, inventories,
                 (int)origResult);
         if (!s_dumpedCanQueueCtx) {
             s_dumpedCanQueueCtx = true;
@@ -530,8 +536,7 @@ int __fastcall HookGetMaxCraftableStack(void* self, void* recipe, void* inventor
     if (Trainer::Get().FreeCraft) {
         LogFreeCraftPath(FreeCraftPathKind::Items, "GetMaxCraftableStack", ret);
         if (s_logGetMaxStackCount++ < kMaxHookLogPerHook)
-            printf("[HOOK] GetMaxCraftableStack#%d caller=+0x%llX self=%p recipe=%p\n",
-                s_logGetMaxStackCount, (unsigned long long)RelCaller(ret), self, recipe);
+            LOG_HOOK("GetMaxCraftableStack#%d caller=+0x%llX self=%p recipe=%p", s_logGetMaxStackCount, (unsigned long long)RelCaller(ret), self, recipe);
         return 9999;
     }
     return g_origGetMaxCraftableStack(self, recipe, inventories, craftingPlayer);
@@ -547,8 +552,7 @@ bool __fastcall HookConsumeItem(void* self, int location, int amount, bool clear
     if (Trainer::Get().FreeCraft) {
         LogFreeCraftPath(FreeCraftPathKind::Items, "ConsumeItem", ret);
         if (s_logConsumeItemCount++ < kMaxHookLogPerHook)
-            printf("[HOOK] ConsumeItem#%d self=%p loc=%d amt=%d clear=%d\n",
-                s_logConsumeItemCount, self, location, amount, (int)clearItemSave);
+            LOG_HOOK("ConsumeItem#%d self=%p loc=%d amt=%d clear=%d", s_logConsumeItemCount, self, location, amount, (int)clearItemSave);
         return true;
     }
     return g_origConsumeItem(self, location, amount, clearItemSave);
@@ -566,8 +570,7 @@ bool __fastcall HookHasSufficientResource(void* self, void* resourceType, int re
         QueueProcessorKick(self);
         LogFreeCraftPath(FreeCraftPathKind::Resources, "HasSufficientResource", ret);
         if (s_logHasSufficientResourceCount++ < kMaxHookLogPerHook) {
-            printf("[GATE] HasSufficientResource#%d caller=+0x%llX self=%p resource=%p req=%d cost=%d addInv=%p orig=%d -> 1\n",
-                s_logHasSufficientResourceCount, (unsigned long long)RelCaller(ret), self, resourceType, requiredAmount,
+            LOG_HOOK("HasSufficientResource#%d caller=+0x%llX self=%p resource=%p req=%d cost=%d addInv=%p orig=%d -> 1", s_logHasSufficientResourceCount, (unsigned long long)RelCaller(ret), self, resourceType, requiredAmount,
                 recipeCost, additionalInventories, (int)orig);
         }
         if (!s_dumpedHasSufficientCtx) {
@@ -589,8 +592,7 @@ int __fastcall HookGetResourceRecipeValidity(void* self, void* resourceType, int
     if (freeCraft) {
         LogFreeCraftPath(FreeCraftPathKind::Resources, "GetResourceRecipeValidity", ret);
         if (s_logGetRecipeValidityCount++ < kMaxHookLogPerHook) {
-            printf("[GATE] GetResourceRecipeValidity#%d caller=+0x%llX self=%p resource=%p req=%d addInv=%p orig=%d -> 0\n",
-                s_logGetRecipeValidityCount, (unsigned long long)RelCaller(ret), self, resourceType, requiredAmount,
+            LOG_HOOK("GetResourceRecipeValidity#%d caller=+0x%llX self=%p resource=%p req=%d addInv=%p orig=%d -> 0", s_logGetRecipeValidityCount, (unsigned long long)RelCaller(ret), self, resourceType, requiredAmount,
                 additionalInventories, orig);
         }
         if (!s_dumpedGetRecipeValidityCtx) {
@@ -843,8 +845,7 @@ static bool AppendCtxToTickSubsystem(void* ctx) {
     if (!SafeReadI32 (arrayAddr + 12, max))  return false;
 
     if (!data || count < 0 || count > max || max <= 0 || max > 100000) {
-        printf("[TICKFIX] TArray looks stale: data=%p count=%d max=%d — invalidating\n",
-            (void*)data, count, max);
+        LOG_TICKFIX("TArray looks stale: data=%p count=%d max=%d — invalidating", (void*)data, count, max);
         s_tickSubsysValidated = false;
         s_tickSubsysInstance = 0;
         return false;
@@ -873,8 +874,7 @@ static bool AppendCtxToTickSubsystem(void* ctx) {
     // 10 slots of slack (max=24, count=14 typically) is enough for normal
     // play. If a user ever hits the limit, log and bail.
     if (count >= max) {
-        printf("[TICKFIX] TArray full (count=%d max=%d) — cannot append without realloc\n",
-            count, max);
+        LOG_TICKFIX("TArray full (count=%d max=%d) — cannot append without realloc", count, max);
         return false;
     }
 
@@ -887,16 +887,15 @@ static bool AppendCtxToTickSubsystem(void* ctx) {
     // Write the element first, then bump the count
     uintptr_t slotAddr = data + static_cast<uintptr_t>(count) * 8;
     if (!SafeWriteU64(slotAddr, weakPtr)) {
-        printf("[TICKFIX] write to slot @ 0x%p failed\n", (void*)slotAddr);
+        LOG_TICKFIX("write to slot @ 0x%p failed", (void*)slotAddr);
         return false;
     }
     if (!SafeWriteI32(arrayAddr + 8, count + 1)) {
-        printf("[TICKFIX] count bump failed — list may be corrupt\n");
+        LOG_TICKFIX("count bump failed — list may be corrupt");
         return false;
     }
 
-    printf("[TICKFIX] appended ctx=%p idx=%d ser=%d at slot %d (count %d->%d max=%d)\n",
-        ctx, ctxIdx, serial, count, count, count + 1, max);
+    LOG_TICKFIX("appended ctx=%p idx=%d ser=%d at slot %d (count %d->%d max=%d)", ctx, ctxIdx, serial, count, count, count + 1, max);
     s_tickSubsysLastCount = count + 1;
     return true;
 }
@@ -1032,12 +1031,11 @@ void __fastcall HookAddProcessingRecipeThunk(void* context, void* frame, void* r
                                "(PI0=0x%p PI8=0x%p, Q now=%d)\n",
                             context, qcBefore, (void*)pi0, (void*)pi8, qcAfter - 1);
                     } else {
-                        printf("[TICKFIX] pre-populate read/write failed for ctx=%p\n", context);
+                        LOG_TICKFIX("pre-populate read/write failed for ctx=%p", context);
                     }
                 }
             } else {
-                printf("[TICKFIX] PI already populated (PI0=0x%p), leaving queue in place\n",
-                    (void*)currentPI0);
+                LOG_TICKFIX("PI already populated (PI0=0x%p), leaving queue in place", (void*)currentPI0);
             }
         }
 
@@ -1117,6 +1115,33 @@ void PollArpcTrackedProcessor() {
         s_arpcTrackedLastMJ  = mj;
         s_arpcTrackedLastPP  = pp;
     }
+}
+
+// ============================================================================
+// Talent Model writer — SAFE version.
+//
+// Earlier iterations flooded ~9 int32 slots and hooked 4 BP-event
+// UFunctions. Both caused issues: the multi-offset flood corrupted the
+// UMG widget's internal state (crash on execNotEqual_ByteByte), and
+// hooking BP-event thunks caused a script VM reentrance crash with
+// FFrame.Code = 0xFFFFFFFFFFFFFFFF during the widget Tick.
+//
+// Keep it to +0xD8 only. That's the slot we confirmed matches the
+// user's actual "21 Solo points available" value. It doesn't make the
+// UI refresh visually (the widget reads through an opaque getter), but
+// writing it raises the internal budget the Model hands out to spend
+// paths, so the user CAN spend more points than the UI shows. The UI
+// label refreshes on next tab re-open or next level-up event.
+// ============================================================================
+static void ClampTalentModelAvailablePoints(void* controller, int32_t value) {
+    if (!controller) return;
+    __try {
+        void* model = *(void**)((uintptr_t)controller + 0xC8);
+        if (!model) return;
+        int32_t* p = (int32_t*)((uintptr_t)model + 0xD8);
+        if (*p < value) *p = value;
+    }
+    __except (1) { }
 }
 
 bool __fastcall HookCanProcess(void* self) {
@@ -1292,8 +1317,7 @@ int __fastcall HookFindItemCountByType(void* a0, void* a1, void* a2, void* a3, v
         if (s_craftValidationDepth > 0) {
             if (s_logFindItemCountForceCount++ < kMaxHookLogPerHook) {
                 void* ret = _ReturnAddress();
-                printf("[HOOK] FindItemCountByType FORCE#%d depth=%d self=%p caller=+0x%llX -> 9999\n",
-                    s_logFindItemCountForceCount, s_craftValidationDepth, a0,
+                LOG_HOOK("FindItemCountByType FORCE#%d depth=%d self=%p caller=+0x%llX -> 9999", s_logFindItemCountForceCount, s_craftValidationDepth, a0,
                     (unsigned long long)RelCaller(ret));
             }
             return 9999;
@@ -1308,8 +1332,7 @@ int __fastcall HookFindItemCountByType(void* a0, void* a1, void* a2, void* a3, v
         if (IsPlayerOwnedInventory(a0)) {
             if (s_logOwnershipForceCount++ < kMaxHookLogPerHook) {
                 void* ret = _ReturnAddress();
-                printf("[HOOK] FindItemCountByType OWNER-FORCE#%d self=%p caller=+0x%llX -> 9999\n",
-                    s_logOwnershipForceCount, a0, (unsigned long long)RelCaller(ret));
+                LOG_HOOK("FindItemCountByType OWNER-FORCE#%d self=%p caller=+0x%llX -> 9999", s_logOwnershipForceCount, a0, (unsigned long long)RelCaller(ret));
             }
             return 9999;
         }
@@ -1319,8 +1342,7 @@ int __fastcall HookFindItemCountByType(void* a0, void* a1, void* a2, void* a3, v
         s_logFindItemCountPassthroughCount++;
         void* ret = _ReturnAddress();
         std::string owner = InventoryOwnerClassName(a0);
-        printf("[HOOK] FindItemCountByType PASSTHROUGH#%d self=%p owner=%s caller=+0x%llX -> %d\n",
-            s_logFindItemCountPassthroughCount, a0, owner.c_str(),
+        LOG_HOOK("FindItemCountByType PASSTHROUGH#%d self=%p owner=%s caller=+0x%llX -> %d", s_logFindItemCountPassthroughCount, a0, owner.c_str(),
             (unsigned long long)RelCaller(ret), orig);
         // Identify the caller the first time we see a passthrough — that's
         // the function running outside any of our validation hooks, most
@@ -1338,8 +1360,7 @@ int __fastcall HookGetItemCount(void* a0, void* a1, void* a2, void* a3, void* a4
         if (s_craftValidationDepth > 0) {
             if (s_logGetItemCountForceCount++ < kMaxHookLogPerHook) {
                 void* ret = _ReturnAddress();
-                printf("[HOOK] GetItemCount FORCE#%d depth=%d self=%p caller=+0x%llX -> 9999\n",
-                    s_logGetItemCountForceCount, s_craftValidationDepth, a0,
+                LOG_HOOK("GetItemCount FORCE#%d depth=%d self=%p caller=+0x%llX -> 9999", s_logGetItemCountForceCount, s_craftValidationDepth, a0,
                     (unsigned long long)RelCaller(ret));
             }
             return 9999;
@@ -1347,8 +1368,7 @@ int __fastcall HookGetItemCount(void* a0, void* a1, void* a2, void* a3, void* a4
         if (IsPlayerOwnedInventory(a0)) {
             if (s_logOwnershipForceCount++ < kMaxHookLogPerHook) {
                 void* ret = _ReturnAddress();
-                printf("[HOOK] GetItemCount OWNER-FORCE#%d self=%p caller=+0x%llX -> 9999\n",
-                    s_logOwnershipForceCount, a0, (unsigned long long)RelCaller(ret));
+                LOG_HOOK("GetItemCount OWNER-FORCE#%d self=%p caller=+0x%llX -> 9999", s_logOwnershipForceCount, a0, (unsigned long long)RelCaller(ret));
             }
             return 9999;
         }
@@ -1358,8 +1378,7 @@ int __fastcall HookGetItemCount(void* a0, void* a1, void* a2, void* a3, void* a4
         s_logGetItemCountPassthroughCount++;
         void* ret = _ReturnAddress();
         std::string owner = InventoryOwnerClassName(a0);
-        printf("[HOOK] GetItemCount PASSTHROUGH#%d self=%p owner=%s caller=+0x%llX -> %d\n",
-            s_logGetItemCountPassthroughCount, a0, owner.c_str(),
+        LOG_HOOK("GetItemCount PASSTHROUGH#%d self=%p owner=%s caller=+0x%llX -> %d", s_logGetItemCountPassthroughCount, a0, owner.c_str(),
             (unsigned long long)RelCaller(ret), orig);
         if (!s_getItemCountPassthroughDumped) {
             s_getItemCountPassthroughDumped = true;
@@ -1562,8 +1581,7 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
     // to the depth-counter filter alone. Non-fatal.
     if (UObjectLookup::IsInitialized() && !s_invCompUClass) {
         s_invCompUClass = UObjectLookup::FindClassByName("InventoryComponent");
-        printf("[FREECRAFT] InventoryComponent UClass cached at 0x%p\n",
-            reinterpret_cast<void*>(s_invCompUClass));
+        LOG_FC("InventoryComponent UClass cached at 0x%p", reinterpret_cast<void*>(s_invCompUClass));
     }
 
     uintptr_t csriAddr =
@@ -1627,6 +1645,24 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
     uintptr_t invFindItemsByQueryAddr =
         ResolveNativeOnly("Inventory", "FindItemsByQuery", "Inventory::FindItemsByQuery");
 
+    // Talent refresh pipeline — hook the TalentControllerComponent
+    // UFunctions so we can clamp the live Model point fields every time
+    // the game kicks a UI refresh. This is the only reliable way to
+    // propagate our clamped values to the UMG widget since the widget
+    // reads through an opaque getter that isn't UProperty-discoverable.
+    uintptr_t triggerRefreshAddr =
+        ResolveNativeOnly("TalentControllerComponent", "TriggerModelStateRefresh",
+                          "TalentControllerComponent::TriggerModelStateRefresh");
+    uintptr_t bpForceRefreshAddr =
+        ResolveNativeOnly("TalentControllerComponent", "BP_ForceRefresh",
+                          "TalentControllerComponent::BP_ForceRefresh");
+    uintptr_t onModelViewChangedAddr =
+        ResolveNativeOnly("TalentControllerComponent", "OnModelViewChanged",
+                          "TalentControllerComponent::OnModelViewChanged");
+    uintptr_t nativeModelStateChangedAddr =
+        ResolveNativeOnly("TalentControllerComponent", "NativeModelStateChanged",
+                          "TalentControllerComponent::NativeModelStateChanged");
+
     // Resolve the THUNK address (UFunction::Func at +0xD8) for
     // OnServer_AddProcessingRecipe directly, bypassing ResolveThunkToImpl
     // (which is unreliable for void-returning UFunctions). The thunk is a
@@ -1640,8 +1676,7 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
             if (ufunc) {
                 addProcessingRecipeThunkAddr = UObjectLookup::GetUFunctionNativeAddr(ufunc);
                 if (addProcessingRecipeThunkAddr) {
-                    printf("[RESOLVE] OnServer_AddProcessingRecipe THUNK -> 0x%p\n",
-                        (void*)addProcessingRecipeThunkAddr);
+                    LOG_RESOLVE("OnServer_AddProcessingRecipe THUNK -> 0x%p", (void*)addProcessingRecipeThunkAddr);
                 }
             }
         }
@@ -1664,23 +1699,23 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
         if (UObjectLookup::IsInitialized()) {
             uintptr_t addr = UObjectLookup::FindNativeFunction(className, fnName);
             if (addr) {
-                printf("[HOOK] %s: name lookup -> 0x%p\n", logName, (void*)addr);
+                LOG_HOOK("%s: name lookup -> 0x%p", logName, (void*)addr);
                 return addr;
             }
         }
         // Tier 2: AOB pattern scan
         uintptr_t hit = UE4::PatternScan(base, sz, aob);
         if (hit) {
-            printf("[HOOK] %s: AOB scan -> 0x%p\n", logName, (void*)hit);
+            LOG_HOOK("%s: AOB scan -> 0x%p", logName, (void*)hit);
             return hit;
         }
         // Tier 3: PDB offset (last resort)
         uintptr_t cand = base + pdbOff;
         if (MatchPrefix(cand, prefix, prefixLen)) {
-            printf("[HOOK] %s: PDB offset -> 0x%p\n", logName, (void*)cand);
+            LOG_HOOK("%s: PDB offset -> 0x%p", logName, (void*)cand);
             return cand;
         }
-        printf("[HOOK] %s: ALL RESOLVERS FAILED — hook skipped\n", logName);
+        LOG_HOOK("%s: ALL RESOLVERS FAILED — hook skipped", logName);
         return 0;
     };
 
@@ -1702,14 +1737,13 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
         static const uint8_t prefixConsume[] = { 0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C };
         if (!MatchPrefix(consumeAddr, prefixConsume, sizeof(prefixConsume))) {
             uint8_t* p = reinterpret_cast<uint8_t*>(consumeAddr);
-            printf("[HOOK] ConsumeItem: WARN prologue mismatch (%02X %02X %02X %02X %02X %02X %02X %02X)\n",
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+            LOG_HOOK("ConsumeItem: WARN prologue mismatch (%02X %02X %02X %02X %02X %02X %02X %02X)", p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
         }
     }
 
     MH_STATUS init = MH_Initialize();
     if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) {
-        printf("[HOOK] MH_Initialize failed: %d\n", (int)init);
+        LOG_HOOK("MH_Initialize failed: %d", (int)init);
         return;
     }
 
@@ -1717,15 +1751,15 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
         if (!addr) return;
         MH_STATUS s = MH_CreateHook(reinterpret_cast<void*>(addr), detour, orig);
         if (s != MH_OK && s != MH_ERROR_ALREADY_CREATED) {
-            printf("[HOOK] %s create failed: %d\n", name, (int)s);
+            LOG_HOOK("%s create failed: %d", name, (int)s);
             return;
         }
         s = MH_EnableHook(reinterpret_cast<void*>(addr));
         if (s != MH_OK && s != MH_ERROR_ENABLED) {
-            printf("[HOOK] %s enable failed: %d\n", name, (int)s);
+            LOG_HOOK("%s enable failed: %d", name, (int)s);
             return;
         }
-        printf("[HOOK] %s installed at 0x%p\n", name, reinterpret_cast<void*>(addr));
+        LOG_HOOK("%s installed at 0x%p", name, reinterpret_cast<void*>(addr));
     };
 
     install(csriAddr,     reinterpret_cast<void*>(&HookCanSatisfyRecipeInput), reinterpret_cast<void**>(&g_origCanSatisfyRecipeInput), "CanSatisfyRecipeInput");
@@ -1737,7 +1771,7 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
     install(getItemCountAddr,  reinterpret_cast<void*>(&HookGetItemCount),
             reinterpret_cast<void**>(&g_origGetItemCount),        "GetItemCount");
     if (csriAddr || cqiAddr || maxStackAddr || consumeAddr || findItemCountAddr || getItemCountAddr) {
-        printf("[FREECRAFT] Item path hooks armed\n");
+        LOG_FC("Item path hooks armed");
     }
     install(getResourceRecipeValidityAddr, reinterpret_cast<void*>(&HookGetResourceRecipeValidity),
             reinterpret_cast<void**>(&g_origGetResourceRecipeValidity), "GetResourceRecipeValidity");
@@ -1767,8 +1801,7 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
         if (!addr) return;
         uintptr_t off = (addr >= base) ? (addr - base) : 0;
         if (off < 0x10000 || off >= 0x4000000) {
-            printf("[HOOK] %s: addr 0x%p (offset 0x%llX) outside plausible code range — SKIP\n",
-                name, (void*)addr, (unsigned long long)off);
+            LOG_HOOK("%s: addr 0x%p (offset 0x%llX) outside plausible code range — SKIP", name, (void*)addr, (unsigned long long)off);
             return;
         }
         install(addr, detour, orig, name);
@@ -1796,15 +1829,25 @@ void InstallCraftValidationHooks(uintptr_t base, size_t sz) {
     safeInstall(invFindItemsByQueryAddr, reinterpret_cast<void*>(&HookInvFindItemsByQuery),
             reinterpret_cast<void**>(&g_origInvFindItemsByQuery), "Inventory::FindItemsByQuery (probe)");
     // PC::AddItem still disabled
-    printf("[FREECRAFT]   ProcessingComponent::AddItem = 0x%p (DISABLED — bad address range)\n",
-        (void*)pcAddItemAddr);
+    LOG_FC("  ProcessingComponent::AddItem = 0x%p (DISABLED — bad address range)", (void*)pcAddItemAddr);
     if (getResourceRecipeValidityAddr || hasSufficientResourceAddr) {
-        printf("[FREECRAFT] Resource path hooks armed\n");
+        LOG_FC("Resource path hooks armed");
     }
     if (hasWaterSourceConnectionAddr || serverStartProcessingAddr || serverActivateProcessorAddr
         || canStartProcessingAddr) {
-        printf("[FREECRAFT] Processor runtime hooks armed\n");
+        LOG_FC("Processor runtime hooks armed");
     }
+
+    // Talent refresh hooks DISABLED — hooking these UFunctions caused a
+    // script VM reentrance crash. They are all BP-event thunks invoked
+    // through UObject::ProcessEvent; swapping their Native pointer via
+    // MinHook leaves the FFrame in an inconsistent state and the widget
+    // Tick BP crashes later on execNotEqual_ByteByte with Code=0xFFFF..FF.
+    // We keep the resolves below for future reference but never install.
+    (void)triggerRefreshAddr;
+    (void)bpForceRefreshAddr;
+    (void)onModelViewChangedAddr;
+    (void)nativeModelStateChangedAddr;
 
     s_craftHooksInstalled = true;
 }
@@ -1826,11 +1869,11 @@ void Trainer::ResolveAllOffsets() {
         if (off >= 0) {
             slot = static_cast<uintptr_t>(off);
         } else {
-            printf("[INIT] WARN unresolved property %s::%s\n", className, propName);
+            LOG_WARN("unresolved property %s::%s", className, propName);
         }
     };
 
-    printf("[INIT] === Resolving UPROPERTY offsets via name lookup ===\n");
+    LOG_SECTION("Resolving UPROPERTY offsets via name lookup");
 
     // --- Engine / UWorld / UGameInstance / UPlayer / AController ---
     // The player-chain scan walks an engine-global pointer whose object
@@ -1870,6 +1913,19 @@ void Trainer::ResolveAllOffsets() {
     resolve(Off::State_MaxWater,    "SurvivalCharacterState", "MaxWater");
     resolve(Off::State_Food,        "SurvivalCharacterState", "FoodLevel");
     resolve(Off::State_MaxFood,     "SurvivalCharacterState", "MaxFood");
+    resolve(Off::State_ModInternalTemp, "SurvivalCharacterState", "ModifiedInternalTemperature");
+    resolve(Off::State_InternalTemp,    "SurvivalCharacterState", "InternalTemperature");
+    resolve(Off::State_TotalExp,        "SurvivalCharacterState", "TotalExperience");
+    resolve(Off::State_Level,           "SurvivalCharacterState", "Level");
+
+    // --- AController / AIcarusPlayerState ---
+    resolve(Off::Ctrl_PlayerState,       "Controller",        "PlayerState");
+    // These two are embedded structs on the PlayerState. The struct types
+    // themselves (OnlineProfileCharacter / OnlineProfileUser) are USTRUCTs,
+    // but the enclosing UPROPERTY lives on IcarusPlayerState so the
+    // reflection walk succeeds. On failure we keep the SDK-dump fallback.
+    resolve(Off::PS_ActiveCharacter,     "IcarusPlayerState", "ActiveCharacter");
+    resolve(Off::PS_ActiveUserProfile,   "IcarusPlayerState", "ActiveUserProfile");
 
     // --- UCharacterMovementComponent ---
     resolve(Off::CMC_MaxWalkSpeed,         "CharacterMovementComponent", "MaxWalkSpeed");
@@ -1887,7 +1943,16 @@ void Trainer::ResolveAllOffsets() {
     resolve(Off::Inv_CurrentWeight,        "Inventory", "CurrentWeight");
     resolve(Off::Inv_Slots,                "Inventory", "Slots");
 
-    printf("[INIT] === Offset resolution complete ===\n");
+    LOG_OK("offset resolution complete");
+    LOG_DEBUG("Off ModInternalTemp=0x%llx InternalTemp=0x%llx TotalExp=0x%llx Level=0x%llx",
+        (unsigned long long)Off::State_ModInternalTemp,
+        (unsigned long long)Off::State_InternalTemp,
+        (unsigned long long)Off::State_TotalExp,
+        (unsigned long long)Off::State_Level);
+    LOG_DEBUG("Off Ctrl_PlayerState=0x%llx PS_ActiveCharacter=0x%llx PS_ActiveUserProfile=0x%llx",
+        (unsigned long long)Off::Ctrl_PlayerState,
+        (unsigned long long)Off::PS_ActiveCharacter,
+        (unsigned long long)Off::PS_ActiveUserProfile);
 }
 
 // SEH helpers — __try/__except can't coexist with C++ object unwinding
@@ -1899,6 +1964,301 @@ static bool SafeReadPtr(uintptr_t addr, uintptr_t& out) {
 static bool SafeReadInt32(uintptr_t addr, int32_t& out) {
     __try { out = *(int32_t*)addr; return true; }
     __except (1) { out = 0; return false; }
+}
+
+// Scan GObjects for live instances whose UClass name contains `needle`
+// (case-insensitive). Used to discover where Icarus actually stores talent
+// / tech / solo progression at runtime when the PlayerState profile
+// structs turn out to be empty. Slow (full GObjects walk) but one-shot.
+static void FindLiveInstancesByClassSubstring(const char* needle, int maxResults = 20) {
+    if (!UObjectLookup::IsInitialized()) return;
+    int32_t count = UObjectLookup::GetObjectCount();
+    int found = 0;
+    size_t needleLen = 0;
+    while (needle[needleLen]) ++needleLen;
+
+    auto icontains = [](const std::string& hay, const char* nd, size_t ndLen) -> bool {
+        if (hay.size() < ndLen) return false;
+        for (size_t i = 0; i + ndLen <= hay.size(); ++i) {
+            bool ok = true;
+            for (size_t j = 0; j < ndLen; ++j) {
+                char a = hay[i + j]; if (a >= 'A' && a <= 'Z') a = (char)(a + 32);
+                char b = nd[j];      if (b >= 'A' && b <= 'Z') b = (char)(b + 32);
+                if (a != b) { ok = false; break; }
+            }
+            if (ok) return true;
+        }
+        return false;
+    };
+
+    LOG_SCAN("'%s': walking %d UObjects...", needle, count);
+    for (int32_t i = 0; i < count && found < maxResults; ++i) {
+        uintptr_t obj = UObjectLookup::GetObjectByIndex(i);
+        if (!obj) continue;
+        std::string cn = UObjectLookup::GetObjectClassName(obj);
+        if (cn.empty()) continue;
+        if (!icontains(cn, needle, needleLen)) continue;
+        std::string on = UObjectLookup::GetObjectName(obj);
+        LOG_SCAN("  [#%d] 0x%llx name=%s class=%s", i, (unsigned long long)obj, on.c_str(), cn.c_str());
+        ++found;
+    }
+    LOG_SCAN("'%s': %d live matches", needle, found);
+}
+
+// Safely read a TArray<UObject*> header (data pointer + count) from an
+// offset on a live actor. SEH-only, no C++ objects, so C2712 doesn't
+// trip. Returns false on any bad read.
+static bool SafeReadTArrayHeader(void* owner, uintptr_t fieldOff,
+                                  void*** outData, int32_t* outNum) {
+    __try {
+        *outData = *(void***)((uintptr_t)owner + fieldOff);
+        *outNum  = *(int32_t*)((uintptr_t)owner + fieldOff + 8);
+        return true;
+    }
+    __except (1) {
+        *outData = nullptr;
+        *outNum  = 0;
+        return false;
+    }
+}
+
+static bool SafeReadPtrIndex(void** data, int32_t index, void** outPtr) {
+    __try { *outPtr = data[index]; return true; }
+    __except (1) { *outPtr = nullptr; return false; }
+}
+
+// SEH-wrapped 16-byte read. Used by HexDump to walk a UObject's bytes
+// without crashing on short reads at the end of an allocation.
+static bool SafeReadBytes16(const void* base, size_t off, unsigned char out[16]) {
+    __try {
+        const unsigned char* p = (const unsigned char*)base + off;
+        for (int i = 0; i < 16; ++i) out[i] = p[i];
+        return true;
+    }
+    __except (1) { return false; }
+}
+
+// SEH-wrapped pointer read at an arbitrary offset.
+static void* SafeReadPtrAt(const void* base, uintptr_t off) {
+    __try { return *(void**)((const unsigned char*)base + off); }
+    __except (1) { return nullptr; }
+}
+
+// Hex dump of the first `bytes` bytes of a UObject, for layout discovery.
+// Helps locate valid-looking pointer candidates (0x000001e0xxxxxxxx heap
+// range) when a known-good field offset isn't yet discovered.
+static void HexDump(const char* label, void* obj, size_t bytes) {
+    if (!obj) { LOG_LAYOUT("%s: null", label); return; }
+    LOG_LAYOUT("=== %s @ 0x%p ===", label, obj);
+    for (size_t off = 0; off < bytes; off += 16) {
+        unsigned char b[16];
+        if (!SafeReadBytes16(obj, off, b)) return;
+        LOG_LAYOUT("  +0x%03llx  %02x %02x %02x %02x %02x %02x %02x %02x  "
+                   "%02x %02x %02x %02x %02x %02x %02x %02x",
+            (unsigned long long)off,
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+            b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+    }
+}
+
+// Enumerate every live (non-CDO) instance of a class and print its
+// address + the pointer at a configurable "probe" offset. Used to find
+// the correct TalentController instance whose Model is non-null.
+static void EnumerateLiveInstancesWithProbe(const char* className,
+                                             uintptr_t probeOff,
+                                             int maxResults) {
+    if (!UObjectLookup::IsInitialized()) return;
+    int32_t count = UObjectLookup::GetObjectCount();
+    int found = 0;
+    LOG_SCAN("enumerate '%s' probe@+0x%llx", className,
+             (unsigned long long)probeOff);
+    for (int32_t i = 0; i < count && found < maxResults; ++i) {
+        uintptr_t obj = UObjectLookup::GetObjectByIndex(i);
+        if (!obj) continue;
+        std::string cn = UObjectLookup::GetObjectClassName(obj);
+        if (cn != className) continue;
+        std::string on = UObjectLookup::GetObjectName(obj);
+        if (on.compare(0, 9, "Default__") == 0) continue;
+        void* probe = SafeReadPtrAt((void*)obj, probeOff);
+        LOG_SCAN("  #%d  obj=0x%llx name=%s  probe=0x%p",
+                 i, (unsigned long long)obj, on.c_str(), probe);
+        ++found;
+    }
+    if (found == 0) LOG_WARN("no live '%s' instances", className);
+}
+
+// Dump every component attached to an Icarus character via the
+// InstanceComponents / BlueprintCreatedComponents TArrays. Helps locate
+// things like TalentsComponent / PlayerProgressionComponent that the
+// character may own directly. Split into SafeRead* (SEH) + printf/std::string
+// (no SEH) because __try + C++ unwinding can't coexist in one function.
+static void DumpCharacterComponentsOne(const char* label, void* character, uintptr_t offT) {
+    if (!offT) { LOG_COMP("%s: offset 0 - unresolved", label); return; }
+    void** data = nullptr;
+    int32_t num = 0;
+    if (!SafeReadTArrayHeader(character, offT, &data, &num)) {
+        LOG_COMP("%s: TArray header read crashed", label);
+        return;
+    }
+    LOG_COMP("%s @ +0x%llx: num=%d data=0x%llx", label, (unsigned long long)offT, num, (unsigned long long)data);
+    if (!data || num <= 0 || num > 256) return;
+
+    for (int32_t i = 0; i < num; ++i) {
+        void* comp = nullptr;
+        if (!SafeReadPtrIndex(data, i, &comp) || !comp) continue;
+        std::string cn = UObjectLookup::GetObjectClassName((uintptr_t)comp);
+        LOG_COMP("  [%2d] 0x%p  class=%s", i, comp, cn.c_str());
+    }
+}
+
+static void DumpCharacterComponents(void* character) {
+    if (!character) return;
+    DumpCharacterComponentsOne("InstanceComponents",         character, Off::Char_InstanceComponents);
+    DumpCharacterComponentsOne("BlueprintCreatedComponents", character, Off::Char_BlueprintComponents);
+}
+
+// Scan character component lists for a component whose class name matches
+// exactly (case-sensitive). Returns the component pointer, or nullptr.
+// Used to cache the player's ExperienceComponent.
+static void* FindCharacterComponentByClass(void* character, const char* className) {
+    if (!character) return nullptr;
+    for (int pass = 0; pass < 2; ++pass) {
+        uintptr_t off = (pass == 0) ? Off::Char_InstanceComponents : Off::Char_BlueprintComponents;
+        if (!off) continue;
+        void** data = nullptr;
+        int32_t num = 0;
+        if (!SafeReadTArrayHeader(character, off, &data, &num)) continue;
+        if (!data || num <= 0 || num > 256) continue;
+        for (int32_t i = 0; i < num; ++i) {
+            void* comp = nullptr;
+            if (!SafeReadPtrIndex(data, i, &comp) || !comp) continue;
+            std::string cn = UObjectLookup::GetObjectClassName((uintptr_t)comp);
+            if (cn == className) return comp;
+        }
+    }
+    return nullptr;
+}
+
+// Walk GObjects for the first live (non-CDO) instance of a class. The CDO
+// has the name prefix "Default__" which we skip. Returns nullptr if no
+// live instance is found.
+static void* FindFirstLiveInstance(const char* className) {
+    if (!UObjectLookup::IsInitialized()) return nullptr;
+    int32_t count = UObjectLookup::GetObjectCount();
+    for (int32_t i = 0; i < count; ++i) {
+        uintptr_t obj = UObjectLookup::GetObjectByIndex(i);
+        if (!obj) continue;
+        std::string cn = UObjectLookup::GetObjectClassName(obj);
+        if (cn != className) continue;
+        std::string on = UObjectLookup::GetObjectName(obj);
+        if (on.compare(0, 9, "Default__") == 0) continue; // skip CDO
+        return (void*)obj;
+    }
+    return nullptr;
+}
+
+// Walk GObjects for the first live instance of a class whose pointer at
+// `probeOff` is non-null. Used to pick the "real" TalentController (the
+// one with an initialized Model) over the several dormant shells that
+// Icarus keeps around per session / per screen.
+static void* FindFirstInstanceWithNonNullProbe(const char* className,
+                                                uintptr_t probeOff) {
+    if (!UObjectLookup::IsInitialized()) return nullptr;
+    int32_t count = UObjectLookup::GetObjectCount();
+    for (int32_t i = 0; i < count; ++i) {
+        uintptr_t obj = UObjectLookup::GetObjectByIndex(i);
+        if (!obj) continue;
+        std::string cn = UObjectLookup::GetObjectClassName(obj);
+        if (cn != className) continue;
+        std::string on = UObjectLookup::GetObjectName(obj);
+        if (on.compare(0, 9, "Default__") == 0) continue;
+        void* probe = SafeReadPtrAt((void*)obj, probeOff);
+        if (!probe) continue;
+        return (void*)obj;
+    }
+    return nullptr;
+}
+
+// One-shot diagnostic dump of a TArray<MetaResource>. Prints every entry
+// (MetaRow FString + Count int32) so we can see the REAL key names the
+// game uses. Kept in its own no-object function because of the __try.
+static void DumpMetaResourceArray(const char* label, uintptr_t arrayAddr) {
+    LOG_META("%s  array @ 0x%llx", label, (unsigned long long)arrayAddr);
+    __try {
+        uintptr_t dataPtr = *(uintptr_t*)arrayAddr;
+        int32_t   num     = *(int32_t*)(arrayAddr + 8);
+        int32_t   cap     = *(int32_t*)(arrayAddr + 12);
+        LOG_META("  data=0x%llx  num=%d  max=%d", (unsigned long long)dataPtr, num, cap);
+        if (!dataPtr || num <= 0 || num > 256) return;
+
+        for (int32_t i = 0; i < num; ++i) {
+            uintptr_t entry = dataPtr + (uintptr_t)i * Off::MR_Size;
+            wchar_t*  str   = *(wchar_t**)(entry + Off::MR_MetaRow);
+            int32_t   sLen  = *(int32_t*)(entry + Off::MR_MetaRow + 8);
+            int32_t   count = *(int32_t*)(entry + Off::MR_Count);
+
+            // Best-effort narrow conversion for printf. FString len
+            // includes the null terminator.
+            char narrow[80] = {0};
+            if (str && sLen > 0 && sLen < 80) {
+                int effective = sLen - 1;
+                if (effective > 79) effective = 79;
+                for (int c = 0; c < effective; ++c) {
+                    wchar_t wc = str[c];
+                    narrow[c] = (wc < 0x80) ? (char)wc : '?';
+                }
+            }
+            LOG_META("  [%2d] MetaRow=\"%s\" (len=%d)  Count=%d", i, narrow, sLen, count);
+        }
+    }
+    __except (1) {
+        LOG_META("  walk crashed");
+    }
+}
+
+// Walk a TArray<MetaResource> inside an OnlineProfileCharacter /
+// OnlineProfileUser struct and clamp the Count field of the entry whose
+// FString MetaRow equals `key`. Returns true if a matching entry was
+// found and written. Kept in its own no-object function so __try/__except
+// covers every raw read without fighting C++ unwinding.
+//
+// Memory layout (UE 4.27, Icarus SDK dump):
+//   MetaResource {
+//       FString MetaRow;  // +0x00 { wchar_t* data, int32 num, int32 max }
+//       int32   Count;    // +0x10
+//       uint8   Pad[4];   // +0x14
+//   }  // sizeof == 0x18
+static bool ClampMetaResourceByName(uintptr_t arrayAddr, const wchar_t* key, int32_t target) {
+    __try {
+        uintptr_t dataPtr = *(uintptr_t*)arrayAddr;
+        int32_t   num     = *(int32_t*)(arrayAddr + 8);
+        if (!dataPtr || num <= 0 || num > 256) return false;
+
+        size_t keyLen = 0;
+        while (key[keyLen]) ++keyLen;
+
+        for (int32_t i = 0; i < num; ++i) {
+            uintptr_t entry = dataPtr + (uintptr_t)i * Off::MR_Size;
+            wchar_t*  str   = *(wchar_t**)(entry + Off::MR_MetaRow);
+            int32_t   sLen  = *(int32_t*)(entry + Off::MR_MetaRow + 8);
+            // FString Num includes the null terminator.
+            if (!str || sLen <= 1 || sLen > 64) continue;
+            if ((size_t)(sLen - 1) != keyLen) continue;
+
+            bool match = true;
+            for (size_t c = 0; c < keyLen; ++c) {
+                if (str[c] != key[c]) { match = false; break; }
+            }
+            if (!match) continue;
+
+            int32_t* countPtr = (int32_t*)(entry + Off::MR_Count);
+            if (*countPtr < target) *countPtr = target;
+            return true;
+        }
+    } __except (1) {
+        return false;
+    }
+    return false;
 }
 
 // Walk the FField ChildProperties chain of a UClass and log every property
@@ -1915,7 +2275,7 @@ static void DumpClassProperties(const char* className) {
     if (!UObjectLookup::IsInitialized()) return;
     uintptr_t cls = UObjectLookup::FindClassByName(className);
     if (!cls) {
-        printf("[PROPS] %s: class not found\n", className);
+        LOG_PROPS("%s: class not found", className);
         return;
     }
 
@@ -1925,13 +2285,13 @@ static void DumpClassProperties(const char* className) {
     constexpr int OFF_FFIELD_NAME = 0x28;
     constexpr int OFF_FPROP_OFF   = 0x4C;
 
-    printf("[PROPS] === %s layout ===\n", className);
+    LOG_PROPS("=== %s layout ===", className);
     uintptr_t walker = cls;
     int hops = 0;
     int totalProps = 0;
     while (walker && hops < 16 && totalProps < 600) {
         std::string clsNameStr = UObjectLookup::GetObjectName(walker);
-        printf("[PROPS] class %s (UClass=0x%llX)\n", clsNameStr.c_str(),
+        LOG_PROPS("class %s (UClass=0x%llX)", clsNameStr.c_str(),
             (unsigned long long)walker);
 
         uintptr_t childProp = 0;
@@ -1949,7 +2309,7 @@ static void DumpClassProperties(const char* className) {
                 ? UObjectLookup::ReadFNameAt(ffieldClass)
                 : std::string("<?>");
             std::string propName = UObjectLookup::ReadFNameAt(childProp + OFF_FFIELD_NAME);
-            printf("[PROPS]   +0x%03X  %-22s  %s\n", propOff, typeName.c_str(), propName.c_str());
+            LOG_PROPS("  +0x%03X  %-22s  %s", propOff, typeName.c_str(), propName.c_str());
 
             childProp = nextField;
             ++totalProps;
@@ -1961,8 +2321,7 @@ static void DumpClassProperties(const char* className) {
         walker = super;
         ++hops;
     }
-    printf("[PROPS] === %s done (%d properties across %d classes) ===\n",
-        className, totalProps, hops);
+    LOG_PROPS("=== %s done (%d properties across %d classes) ===", className, totalProps, hops);
 }
 
 // =============================================================================
@@ -2024,7 +2383,7 @@ static void InspectSubsystemInstanceLayout(const char* className) {
 
     uintptr_t cls = UObjectLookup::FindClassByName(className);
     if (!cls) {
-        printf("[LAYOUT] %s: class not found\n", className);
+        LOG_LAYOUT("%s: class not found", className);
         return;
     }
 
@@ -2047,12 +2406,11 @@ static void InspectSubsystemInstanceLayout(const char* className) {
     }
 
     if (!instance) {
-        printf("[LAYOUT] %s: no live (non-Default__) instance in GObjects\n", className);
+        LOG_LAYOUT("%s: no live (non-Default__) instance in GObjects", className);
         return;
     }
 
-    printf("[LAYOUT] === %s live instance #%d @ 0x%p ===\n",
-        className, instanceIdx, (void*)instance);
+    LOG_LAYOUT("=== %s live instance #%d @ 0x%p ===", className, instanceIdx, (void*)instance);
 
     // Dump the first 0x200 bytes in hex, 16 bytes per row, with ASCII to
     // the right. SEH-guarded in case the instance is smaller than 0x200.
@@ -2061,7 +2419,7 @@ static void InspectSubsystemInstanceLayout(const char* className) {
     int readOK = SafeReadBytes(instance, buf, kDumpBytes);
 
     for (int row = 0; row < readOK; row += 16) {
-        printf("[LAYOUT]   +0x%03X  ", row);
+        LOG_LAYOUT("  +0x%03X", row);
         for (int c = 0; c < 16 && row + c < readOK; ++c)
             printf("%02X ", buf[row + c]);
         printf(" ");
@@ -2072,7 +2430,7 @@ static void InspectSubsystemInstanceLayout(const char* className) {
         printf("\n");
     }
     if (readOK < kDumpBytes)
-        printf("[LAYOUT]   (truncated at +0x%X)\n", readOK);
+        LOG_LAYOUT("  (truncated at +0x%X)", readOK);
 
     // TArray scanner. At each 8-byte aligned offset check whether the
     // slot looks like { void* Data, int32 Count, int32 Max }: Data is a
@@ -2082,7 +2440,7 @@ static void InspectSubsystemInstanceLayout(const char* className) {
     // (TArray<TWeakObjectPtr<UObject>> — 8 bytes { int32 Index, int32
     // Serial }). Whichever interpretation yields resolvable UObjects with
     // recognizable class names tells us which TArray is the one we want.
-    printf("[LAYOUT] Scanning for TArray-shaped fields:\n");
+    LOG_LAYOUT("Scanning for TArray-shaped fields:");
     int candidates = 0;
     int32_t gObjCount = UObjectLookup::GetObjectCount();
     for (int off = 0x30; off + 16 <= readOK; off += 8) {
@@ -2100,8 +2458,7 @@ static void InspectSubsystemInstanceLayout(const char* className) {
         uintptr_t samples[kMaxSamples] = {};
         int readPtrs = SafeReadPtrArray(data, samples, sampleCount);
 
-        printf("[LAYOUT]   +0x%03X TArray data=0x%p count=%d max=%d (sampling %d)\n",
-            off, (void*)data, cnt, mx, readPtrs);
+        LOG_LAYOUT("  +0x%03X TArray data=0x%p count=%d max=%d (sampling %d)", off, (void*)data, cnt, mx, readPtrs);
 
         for (int i = 0; i < readPtrs; ++i) {
             uintptr_t raw = samples[i];
@@ -2128,13 +2485,12 @@ static void InspectSubsystemInstanceLayout(const char* className) {
             const char* wCls  = wClsStr.empty()  ? "-" : wClsStr.c_str();
             const char* wName = wNameStr.empty() ? "-" : wNameStr.c_str();
 
-            printf("[LAYOUT]     [%d] raw=0x%016llx  asPtr:%-24s  asWeak:idx=%d ser=%d -> %s (%s)\n",
-                i, (unsigned long long)raw, asPtrClass, wIdx, wSer, wName, wCls);
+            LOG_LAYOUT("    [%d] raw=0x%016llx  asPtr:%-24s  asWeak:idx=%d ser=%d -> %s (%s)", i, (unsigned long long)raw, asPtrClass, wIdx, wSer, wName, wCls);
         }
         candidates++;
     }
-    printf("[LAYOUT] %d TArray candidate(s) at +0x30..+0x%X\n", candidates, readOK);
-    printf("[LAYOUT] === %s done ===\n", className);
+    LOG_LAYOUT("%d TArray candidate(s) at +0x30..+0x%X", candidates, readOK);
+    LOG_LAYOUT("=== %s done ===", className);
 }
 
 // =============================================================================
@@ -2158,7 +2514,7 @@ static void InspectSubsystemInstanceLayout(const char* className) {
 // =============================================================================
 static void DiscoverTickSubsystem() {
     if (!UObjectLookup::IsInitialized()) return;
-    printf("[DISCOVERY] === Scanning for tick / deployable / processing subsystem classes ===\n");
+    LOG_DISC("=== Scanning for tick / deployable / processing subsystem classes ===");
 
     // Broad enumeration — log every UClass whose name contains these
     // substrings. Case-insensitive. Covers the typical Icarus/UE naming.
@@ -2199,7 +2555,7 @@ static void DiscoverTickSubsystem() {
     for (const char* name : candidates) {
         uintptr_t cls = UObjectLookup::FindClassByName(name);
         if (!cls) continue;
-        printf("[DISCOVERY] FOUND class '%s' @ UClass=0x%p\n", name, (void*)cls);
+        LOG_DISC("FOUND class '%s' @ UClass=0x%p", name, (void*)cls);
         DumpClassProperties(name);
         UObjectLookup::DumpFunctionsOf(cls, 100);
     }
@@ -2207,7 +2563,7 @@ static void DiscoverTickSubsystem() {
     // Also dump any live UObject whose CLASS NAME contains 'Deployable' +
     // 'Subsystem' — this catches the actual instance even if its UClass
     // sits under an unexpected outer chain. We log at most 20 hits.
-    printf("[DISCOVERY] === Searching GObjects for live subsystem instances ===\n");
+    LOG_DISC("=== Searching GObjects for live subsystem instances ===");
     int total = UObjectLookup::GetObjectCount();
     int hits = 0;
     for (int32_t i = 0; i < total && hits < 20; ++i) {
@@ -2224,11 +2580,10 @@ static void DiscoverTickSubsystem() {
             lower.find("processor") == std::string::npos &&
             lower.find("processing") == std::string::npos) continue;
         std::string objName = UObjectLookup::GetObjectName(obj);
-        printf("[DISCOVERY]   instance #%d class=%s name=%s @ 0x%p\n",
-            i, clsName.c_str(), objName.c_str(), (void*)obj);
+        LOG_DISC("  instance #%d class=%s name=%s @ 0x%p", i, clsName.c_str(), objName.c_str(), (void*)obj);
         hits++;
     }
-    printf("[DISCOVERY] === %d instance match(es) ===\n", hits);
+    LOG_DISC("=== %d instance match(es) ===", hits);
 
     // Raw layout inspection: for each subsystem class the active list of
     // processors lives in an unreflected C++ TArray member, so we scan
@@ -2244,7 +2599,7 @@ static void DiscoverTickSubsystem() {
     // before delivering the output. By hooking it to return slot 0, our
     // existing ConsumeItem hook no-ops the actual decrement and output
     // delivery proceeds.
-    printf("[DISCOVERY] === Inventory class function dumps ===\n");
+    LOG_DISC("=== Inventory class function dumps ===");
     const char* invClassCandidates[] = {
         "Inventory",
         "InventoryComponent",
@@ -2257,27 +2612,26 @@ static void DiscoverTickSubsystem() {
     for (const char* cn : invClassCandidates) {
         uintptr_t cls = UObjectLookup::FindClassByName(cn);
         if (!cls) {
-            printf("[DISCOVERY]   %s: class not found\n", cn);
+            LOG_DISC("  %s: class not found", cn);
             continue;
         }
-        printf("[DISCOVERY]   %s @ 0x%p:\n", cn, (void*)cls);
+        LOG_DISC("  %s @ 0x%p:", cn, (void*)cls);
         UObjectLookup::DumpFunctionsOf(cls, 200);
     }
 
     // Also dump ProcessingComponent functions — we know some by name but
     // there might be more we missed (input-validate / consume-helper).
-    printf("[DISCOVERY] === ProcessingComponent function dump ===\n");
+    LOG_DISC("=== ProcessingComponent function dump ===");
     uintptr_t pcCls = UObjectLookup::FindClassByName("ProcessingComponent");
     if (pcCls) UObjectLookup::DumpFunctionsOf(pcCls, 200);
 
-    printf("[DISCOVERY] === end ===\n");
+    LOG_DISC("=== end ===");
 }
 
 void Trainer::Initialize() {
-    AllocConsole();
-    SetConsoleTitleW(L"ZeusMod");
-    freopen_s(&m_con, "CONOUT$", "w", stdout);
-    printf("=== ZeusMod Internal ===\n\n");
+    Log::InitConsole();
+    LOG_OK("ZeusMod trainer loaded into Icarus-Win64-Shipping.exe");
+    LOG_INFO("DLL base probed, spinning up subsystems");
     StartPipeServer();
 
     // Bring up the UE4 reflection-based name lookup BEFORE FindPlayer.
@@ -2286,7 +2640,7 @@ void Trainer::Initialize() {
     // precedes a write to [resultReg] — that's the C++ impl. This makes the
     // entire resolution chain patch-proof across game updates.
     if (UObjectLookup::Initialize()) {
-        printf("[INIT] UObjectLookup ready (name-based resolution active)\n");
+        LOG_INFO("UObjectLookup ready (name-based resolution active)");
         ResolveAllOffsets();
         // One-shot: dump every UProperty of ProcessingComponent with its
         // offset so we can decode any memory region on that instance by
@@ -2303,7 +2657,7 @@ void Trainer::Initialize() {
         // ARPC hit.
         ResolveAndValidateTickSubsystem();
     } else {
-        printf("[INIT] UObjectLookup failed — falling back to hardcoded offsets\n");
+        LOG_INFO("UObjectLookup failed — falling back to hardcoded offsets");
     }
 
     FindPlayer();
@@ -2320,6 +2674,115 @@ void Trainer::Shutdown() {
     if (m_con) { fclose(m_con); FreeConsole(); }
 }
 
+void Trainer::RunOnceDiagnostics() {
+    static bool s_diagDumped = false;
+    if (s_diagDumped) return;
+    s_diagDumped = true;
+
+    LOG_OK("player components cached");
+    LOG_DEBUG("  ExperienceComponent           = 0x%p", m_expComp);
+    LOG_DEBUG("  PlayerTalentControllerComp    = 0x%p", m_playerTalentCtrl);
+    LOG_DEBUG("  SoloTalentControllerComp      = 0x%p", m_soloTalentCtrl);
+    LOG_DEBUG("  BlueprintTalentModel (live)   = 0x%p", m_playerTalentModel);
+    LOG_DEBUG("  SoloTalentModel (live)        = 0x%p", m_soloTalentModel);
+
+    LOG_SECTION("Class properties");
+    DumpClassProperties("ExperienceComponent");
+    DumpClassProperties("PlayerTalentControllerComponent");
+    DumpClassProperties("SoloTalentControllerComponent");
+    DumpClassProperties("TalentControllerComponent");
+
+    LOG_SECTION("TalentController.Model follow-up");
+    {
+        void* pm = SafeReadPtrAt(m_playerTalentCtrl, 0xC8);
+        if (pm) {
+            std::string cn = UObjectLookup::GetObjectClassName((uintptr_t)pm);
+            LOG_OK("Player Model = 0x%p class=%s", pm, cn.c_str());
+            if (!cn.empty()) DumpClassProperties(cn.c_str());
+        } else {
+            LOG_WARN("Player: Model @ +0xC8 is null");
+        }
+        void* sm = SafeReadPtrAt(m_soloTalentCtrl, 0xC8);
+        if (sm) {
+            std::string cn = UObjectLookup::GetObjectClassName((uintptr_t)sm);
+            LOG_OK("Solo Model = 0x%p class=%s", sm, cn.c_str());
+            if (!cn.empty()) DumpClassProperties(cn.c_str());
+        } else {
+            LOG_WARN("Solo: Model @ +0xC8 is null");
+        }
+    }
+
+    LOG_SECTION("Enumerate controller instances with Model probe @ +0xC8");
+    EnumerateLiveInstancesWithProbe("PlayerTalentControllerComponent", 0xC8, 10);
+    EnumerateLiveInstancesWithProbe("SoloTalentControllerComponent",   0xC8, 10);
+
+    LOG_SECTION("Player/Solo TalentModel (resolved via controller +0xC8)");
+    auto dumpModelAndFunctions = [](const char* label, void* model) {
+        if (!model) { LOG_WARN("%s model is null", label); return; }
+        std::string cn = UObjectLookup::GetObjectClassName((uintptr_t)model);
+        std::string on = UObjectLookup::GetObjectName((uintptr_t)model);
+        LOG_OK("%s model = 0x%p name=%s class=%s",
+               label, model, on.c_str(), cn.c_str());
+        if (cn.empty()) return;
+
+        DumpClassProperties(cn.c_str());
+
+        // Dump UFunctions on the model class so we can find callable
+        // things like AddPoints / GrantTalentPoints / SetUnspentPoints.
+        uintptr_t cls = UObjectLookup::FindClassByName(cn.c_str());
+        if (cls) {
+            LOG_INFO("%s: dumping UFunctions on %s", label, cn.c_str());
+            UObjectLookup::DumpFunctionsOf(cls, 120);
+        }
+
+        HexDump((std::string(label) + " bytes").c_str(), model, 0x300);
+    };
+    dumpModelAndFunctions("Player", m_playerTalentModel);
+    dumpModelAndFunctions("Solo",   m_soloTalentModel);
+
+    LOG_SECTION("TalentController UFunctions + raw layout");
+    if (m_playerTalentCtrl) {
+        uintptr_t pcCls = UObjectLookup::FindClassByName("PlayerTalentControllerComponent");
+        if (pcCls) UObjectLookup::DumpFunctionsOf(pcCls, 80);
+        HexDump("PlayerTalentController bytes", m_playerTalentCtrl, 0x200);
+    }
+    if (m_soloTalentCtrl) {
+        uintptr_t scCls = UObjectLookup::FindClassByName("SoloTalentControllerComponent");
+        if (scCls) UObjectLookup::DumpFunctionsOf(scCls, 80);
+        HexDump("SoloTalentController bytes", m_soloTalentCtrl, 0x200);
+    }
+    uintptr_t baseCls = UObjectLookup::FindClassByName("TalentControllerComponent");
+    if (baseCls) {
+        LOG_INFO("Base TalentControllerComponent UFunctions:");
+        UObjectLookup::DumpFunctionsOf(baseCls, 80);
+    }
+
+    LOG_SECTION("TalentView widget classes (UMG)");
+    UObjectLookup::DumpClassesContaining("TalentView", 20);
+    UObjectLookup::DumpClassesContaining("TalentWidget", 20);
+    UObjectLookup::DumpClassesContaining("TalentModel",  20);
+    // If we can find a live widget, dump its class + bytes so we can
+    // see the actual text/int bindings used by the UMG designer.
+    for (const char* wname : {"UMG_TalentView_Solo_C", "UMG_TalentView_Player_C",
+                              "UMG_TalentView_C", "UMG_PlayerTalents_C",
+                              "UMG_SoloTalents_C"}) {
+        void* w = FindFirstLiveInstance(wname);
+        if (w) {
+            LOG_OK("Live widget %s = 0x%p", wname, w);
+            DumpClassProperties(wname);
+            HexDump(wname, w, 0x200);
+        }
+    }
+
+    LOG_SECTION("MetaResources");
+    if (m_playerState) {
+        DumpMetaResourceArray("ActiveCharacter.MetaResources",
+            (uintptr_t)m_playerState + Off::PS_ActiveCharacter + Off::OPC_MetaResources);
+        DumpMetaResourceArray("ActiveUserProfile.MetaResources",
+            (uintptr_t)m_playerState + Off::PS_ActiveUserProfile + Off::OPU_MetaResources);
+    }
+}
+
 void Trainer::FindPlayer() {
     // Find SetHealth and dump the actual bytes to see what we're patching
     if (!m_setHealthAddr) {
@@ -2328,8 +2791,8 @@ void Trainer::FindPlayer() {
         uintptr_t match = UE4::PatternScan(b, sz, kSetHealthWriteAob);
         if (match) {
             // Dump bytes to verify what we're patching
-            printf("[PATCH] Pattern found at 0x%p\n", (void*)match);
-            printf("[PATCH] Bytes: ");
+            LOG_PATCH("Pattern found at 0x%p", (void*)match);
+            LOG_PATCH("Bytes:");
             uint8_t* p = reinterpret_cast<uint8_t*>(match);
             for (int i = 0; i < 22; i++) printf("%02X ", p[i]);
             printf("\n");
@@ -2338,15 +2801,15 @@ void Trainer::FindPlayer() {
             for (int i = 0; i < 20; i++) {
                 if (p[i] == 0x89 && p[i+2] == 0xD8 && p[i+3] == 0x01 && p[i+4] == 0x00 && p[i+5] == 0x00) {
                     m_setHealthAddr = match + i;
-                    printf("[PATCH] Found health write at offset +%d -> 0x%p\n", i, (void*)m_setHealthAddr);
+                    LOG_PATCH("Found health write at offset +%d -> 0x%p", i, (void*)m_setHealthAddr);
                     break;
                 }
             }
             if (!m_setHealthAddr) {
-                printf("[PATCH] Could not find 89 XX D8 01 00 00 in pattern!\n");
+                LOG_PATCH("Could not find 89 XX D8 01 00 00 in pattern!");
             }
         } else {
-            printf("[PATCH] SetHealth AOB not found!\n");
+            LOG_PATCH("SetHealth AOB not found!");
         }
     }
 
@@ -2356,7 +2819,7 @@ void Trainer::FindPlayer() {
         static bool loggedMissingCore = false;
         if (!loggedMissingCore) {
             loggedMissingCore = true;
-            printf("[FIND] Core runtime offsets unresolved, player scan skipped\n");
+            LOG_INFO("Core runtime offsets unresolved, player scan skipped");
         }
         return;
     }
@@ -2389,8 +2852,7 @@ void Trainer::FindPlayer() {
                                    b, sz, nullptr, "HasSufficientResource");
         }
         if (s_getResourceRecipeValidityAddr || s_hasSufficientResourceAddr) {
-            printf("[GATE] Material gate candidate: GetResourceRecipeValidity=%p HasSufficientResource=%p\n",
-                reinterpret_cast<void*>(s_getResourceRecipeValidityAddr),
+            LOG_HOOK("Material gate candidate: GetResourceRecipeValidity=%p HasSufficientResource=%p", reinterpret_cast<void*>(s_getResourceRecipeValidityAddr),
                 reinterpret_cast<void*>(s_hasSufficientResourceAddr));
         }
 
@@ -2419,16 +2881,16 @@ void Trainer::FindPlayer() {
         uintptr_t match = UE4::PatternScan(b, sz, kConsumeItemAob);
         if (match) {
             m_removeItemAddr = match + 5; // points to "44 29 66 04"
-            printf("[PATCH] ConsumeItem sub at 0x%p\n", (void*)m_removeItemAddr);
+            LOG_PATCH("ConsumeItem sub at 0x%p", (void*)m_removeItemAddr);
         } else {
-            printf("[PATCH] ConsumeItem AOB not found\n");
+            LOG_PATCH("ConsumeItem AOB not found");
         }
     }
 
     // (DIAG block removed — those addresses were UFunction thunks, not real
     // enclosing functions. We now resolve impls via UObjectLookup.)
 
-    printf("[FIND] Scanning for player...\n");
+    LOG_INFO("scanning for player...");
 
     uintptr_t base; size_t size;
     UE4::GetModuleInfo(base, size);
@@ -2481,18 +2943,56 @@ void Trainer::FindPlayer() {
                 m_character = ch;
                 m_actorState = as;
 
-                printf("[FOUND] GWorld #%d\n", candidates);
-                printf("  Character:  0x%p\n", ch);
-                printf("  ActorState: 0x%p\n", as);
-                printf("  Health: %d/%d  Stamina: %d/%d\n", hp, maxHp, sta, maxSta);
-                printf("  Armor: %d/%d\n",
+                // PlayerState is on the controller and may be null very
+                // briefly after connect; we simply try to cache it here and
+                // Tick() bails out of the meta-progression features when
+                // m_playerState is still null.
+                if (Off::Ctrl_PlayerState) {
+                    m_playerState = ReadAt<void*>(pc, Off::Ctrl_PlayerState);
+                }
+
+                // Cache the live components we now know from the scan:
+                //   - ExperienceComponent lives in the player's
+                //     BlueprintCreatedComponents at index 20 in the live
+                //     build, but we look it up by class name so it stays
+                //     patch-resilient.
+                //   - PlayerTalentControllerComponent and
+                //     SoloTalentControllerComponent are NOT on the player
+                //     character component lists; they are standalone
+                //     UObjects in GObjects, so we walk GObjects for the
+                //     first non-CDO instance of each.
+                m_expComp          = FindCharacterComponentByClass(ch, "ExperienceComponent");
+                // Pick the TalentController instance whose Model pointer
+                // at +0xC8 is non-null — Icarus keeps several dormant
+                // shells per class in GObjects and only the live
+                // gameplay one has a wired Model.
+                m_playerTalentCtrl = FindFirstInstanceWithNonNullProbe("PlayerTalentControllerComponent", 0xC8);
+                m_soloTalentCtrl   = FindFirstInstanceWithNonNullProbe("SoloTalentControllerComponent",   0xC8);
+                // Once we have the correct controllers, the live models
+                // are simply *(ctrl + 0xC8). Anything else picked up by a
+                // plain GObjects scan is a sibling for a different view.
+                m_playerTalentModel = SafeReadPtrAt(m_playerTalentCtrl, 0xC8);
+                m_soloTalentModel   = SafeReadPtrAt(m_soloTalentCtrl,   0xC8);
+
+                // One-shot diagnostic dumps live in their own method so
+                // FindPlayer itself stays free of C++ object unwinding
+                // (it already uses __try around the gwPtr walk).
+                RunOnceDiagnostics();
+
+                LOG_OK("player resolved (candidate #%d)", candidates);
+                LOG_DEBUG("  Character   = 0x%p", ch);
+                LOG_DEBUG("  ActorState  = 0x%p", as);
+                LOG_DEBUG("  PlayerState = 0x%p", m_playerState);
+                LOG_INFO("Health %d/%d  Stamina %d/%d  Armor %d/%d",
+                    hp, maxHp, sta, maxSta,
                     ReadAt<int>(as, Off::State_Armor),
                     ReadAt<int>(as, Off::State_MaxArmor));
                 return;
             }
 
             if (candidates < 5) {
-                printf("  #%d: HP=%d/%d STA=%d/%d (rejected)\n", candidates, hp, maxHp, sta, maxSta);
+                LOG_DEBUG("candidate #%d rejected: HP=%d/%d STA=%d/%d",
+                    candidates, hp, maxHp, sta, maxSta);
             }
         }
         __except (1) {}
@@ -2503,7 +3003,7 @@ void Trainer::FindPlayer() {
         remain = (base + size) - scanPos;
     }
 
-    printf("[FIND] Not found (%d scanned). Retry in 2s.\n", candidates);
+    LOG_INFO("Not found (%d scanned). Retry in 2s.", candidates);
 }
 
 void Trainer::Tick() {
@@ -2544,7 +3044,7 @@ void Trainer::Tick() {
                 uint8_t check = *reinterpret_cast<uint8_t*>(m_setHealthAddr);
                 if (check != 0x90) {
                     // Patch was undone! Re-apply
-                    printf("[PATCH] Health patch was restored by game! Re-patching...\n");
+                    LOG_PATCH("Health patch was restored by game! Re-patching...");
                     m_setHealthPatched = false;
                     PatchSetHealth(true);
                 }
@@ -2569,9 +3069,9 @@ void Trainer::Tick() {
             static bool armorLogged = false;
             if (!armorLogged) {
                 armorLogged = true;
-                printf("[ARMOR] First tick - cur=%d max=%d\n", curArmor, maxArmor);
+                LOG_DEBUG("First tick - cur=%d max=%d", curArmor, maxArmor);
                 if (maxArmor <= 0) {
-                    printf("[ARMOR] MaxArmor is 0 - equip armor first or it has nothing to fill\n");
+                    LOG_DEBUG("MaxArmor is 0 - equip armor first or it has nothing to fill");
                 }
             }
             if (maxArmor > 0) {
@@ -2597,6 +3097,110 @@ void Trainer::Tick() {
             WriteAt<int>(m_actorState, Off::State_Water, maxWater);
         }
 
+        // Stable Temperature — writes BOTH InternalTemperature (raw, what
+        // the sim mutates) AND ModifiedInternalTemperature (the
+        // post-modifier HUD value). The game stores temperature in
+        // centi-degrees (2395 = 23.95 C), so StableTempValue in degrees
+        // is multiplied by 100 on write.
+        if (StableTemperature) {
+            const int target = StableTempValue * 100;
+            static bool s_tempLogged = false;
+            if (!s_tempLogged) {
+                s_tempLogged = true;
+                int bInt = Off::State_InternalTemp    ? ReadAt<int>(m_actorState, Off::State_InternalTemp)    : -9999;
+                int bMod = Off::State_ModInternalTemp ? ReadAt<int>(m_actorState, Off::State_ModInternalTemp) : -9999;
+                if (Off::State_InternalTemp)    WriteAt<int>(m_actorState, Off::State_InternalTemp,    target);
+                if (Off::State_ModInternalTemp) WriteAt<int>(m_actorState, Off::State_ModInternalTemp, target);
+                int aInt = Off::State_InternalTemp    ? ReadAt<int>(m_actorState, Off::State_InternalTemp)    : -9999;
+                int aMod = Off::State_ModInternalTemp ? ReadAt<int>(m_actorState, Off::State_ModInternalTemp) : -9999;
+                LOG_TEMP("user=%dC store=%d  Internal %d -> %d  ModInternal %d -> %d",
+                         StableTempValue, target, bInt, aInt, bMod, aMod);
+            } else {
+                if (Off::State_InternalTemp)    WriteAt<int>(m_actorState, Off::State_InternalTemp,    target);
+                if (Off::State_ModInternalTemp) WriteAt<int>(m_actorState, Off::State_ModInternalTemp, target);
+            }
+        }
+
+        // Mega Exp — continuously grants +50 000 XP per tick so the XP
+        // bar visibly fills and the game's native level-up path awards
+        // levels + points normally. At 60 FPS that is +3 000 000 XP/sec,
+        // cap at 9 999 999 to avoid int32 weirdness near INT_MAX. Also
+        // mirrors Level = 60 as a belt-and-suspenders fallback in case
+        // the client HUD is decoupled from the XP recompute. A periodic
+        // status log (every ~2 seconds) lets us confirm persistence.
+        if (MegaExp) {
+            static bool s_megaLogged = false;
+            static int  s_megaTick   = 0;
+            if (!s_megaLogged) {
+                s_megaLogged = true;
+                int bXp  = Off::State_TotalExp ? ReadAt<int>(m_actorState, Off::State_TotalExp) : -1;
+                int bLvl = Off::State_Level    ? ReadAt<int>(m_actorState, Off::State_Level)    : -1;
+                LOG_MEGA("enabled: TotalExp=%d Level=%d  granting +50000 xp/tick", bXp, bLvl);
+            }
+            if (Off::State_TotalExp) {
+                int cur = ReadAt<int>(m_actorState, Off::State_TotalExp);
+                long long bumped = (long long)cur + 50000;
+                if (bumped > 9999999) bumped = 9999999;
+                WriteAt<int>(m_actorState, Off::State_TotalExp, (int)bumped);
+            }
+            if (Off::State_Level) {
+                int curLvl = ReadAt<int>(m_actorState, Off::State_Level);
+                if (curLvl < 60) WriteAt<int>(m_actorState, Off::State_Level, 60);
+            }
+            if (++s_megaTick >= 120) {
+                s_megaTick = 0;
+                int xp  = Off::State_TotalExp ? ReadAt<int>(m_actorState, Off::State_TotalExp) : -1;
+                int lvl = Off::State_Level    ? ReadAt<int>(m_actorState, Off::State_Level)    : -1;
+                LOG_MEGA("status: TotalExp=%d Level=%d", xp, lvl);
+            }
+        }
+
+        // Max Talent / Tech / Solo points — the live Talent Models have
+        // a handful of int32 slots in their state-cache block at +0x80,
+        // +0x84, +0x90, +0x94, +0xB0, +0xB4, +0xC0, +0xD0, +0xD8. We
+        // know +0xD8 matches the user's reported Solo points but
+        // writing it alone doesn't move the UI, so the UMG widget is
+        // reading through a different path (possibly a getter the
+        // refresh hooks below feed). We flood every candidate each tick
+        // **and** hook the four refresh UFunctions so that whichever
+        // the widget ends up polling will see 99 999. Pointer / bitmask
+        // slots (+0x88, +0x98, +0xB8, +0xC8, +0xE0) are deliberately
+        // skipped to avoid corruption.
+        if ((MaxTalentPoints || MaxTechPoints) && m_playerTalentCtrl) {
+            ClampTalentModelAvailablePoints(m_playerTalentCtrl, 99999);
+        }
+        if (MaxSoloPoints && m_soloTalentCtrl) {
+            ClampTalentModelAvailablePoints(m_soloTalentCtrl, 99999);
+        }
+
+        // Periodic status log — prints every int32 slot we're clamping
+        // so we can watch which field the UI actually reacts to.
+        static int s_talentStatusTick = 0;
+        if (++s_talentStatusTick >= 120) {
+            s_talentStatusTick = 0;
+            auto printModel = [](const char* label, void* ctrl) {
+                if (!ctrl) return;
+                __try {
+                    void* model = *(void**)((uintptr_t)ctrl + 0xC8);
+                    if (!model) return;
+                    int v80 = *(int*)((uintptr_t)model + 0x80);
+                    int v84 = *(int*)((uintptr_t)model + 0x84);
+                    int v90 = *(int*)((uintptr_t)model + 0x90);
+                    int v94 = *(int*)((uintptr_t)model + 0x94);
+                    int vB0 = *(int*)((uintptr_t)model + 0xB0);
+                    int vB4 = *(int*)((uintptr_t)model + 0xB4);
+                    int vC0 = *(int*)((uintptr_t)model + 0xC0);
+                    int vD0 = *(int*)((uintptr_t)model + 0xD0);
+                    int vD8 = *(int*)((uintptr_t)model + 0xD8);
+                    LOG_DEBUG("%s model: 80=%d 84=%d 90=%d 94=%d B0=%d B4=%d C0=%d D0=%d D8=%d",
+                              label, v80, v84, v90, v94, vB0, vB4, vC0, vD0, vD8);
+                }
+                __except (1) {}
+            };
+            printModel("Player", m_playerTalentCtrl);
+            printModel("Solo",   m_soloTalentCtrl);
+        }
+
         // Speed hack via CustomTimeDilation on the player actor
         // This accelerates everything: movement, animations, actions
         if (SpeedHack && Off::Actor_CustomTimeDilation) {
@@ -2614,10 +3218,10 @@ void Trainer::Tick() {
             static bool wasTimeLocked = false;
             if (TimeLock && !wasTimeLocked) {
                 wasTimeLocked = true;
-                printf("[TIME] TimeLock ENABLED, target=%.2f, m_gworldPtr=%p\n", LockedTime, m_gworldPtr);
+                LOG_DEBUG("TimeLock ENABLED, target=%.2f, m_gworldPtr=%p", LockedTime, m_gworldPtr);
             } else if (!TimeLock && wasTimeLocked) {
                 wasTimeLocked = false;
-                printf("[TIME] TimeLock DISABLED\n");
+                LOG_DEBUG("TimeLock DISABLED");
             }
         }
 
@@ -2646,10 +3250,9 @@ void Trainer::Tick() {
                     // Instruction `48 8B 05 disp32` starts at hit + 12, length 7.
                     uintptr_t gworldAddr = UE4::ResolveRIP(hit + 12, /*opcodeLen*/3, /*instrLen*/7);
                     cachedRealGWorld = reinterpret_cast<void* const*>(gworldAddr);
-                    printf("[TIME] Real GWorld symbol resolved at %p (AOB hit=%p)\n",
-                        cachedRealGWorld, (void*)hit);
+                    LOG_DEBUG("Real GWorld symbol resolved at %p (AOB hit=%p)", cachedRealGWorld, (void*)hit);
                 } else {
-                    printf("[TIME] ERROR: real GWorld AOB not found\n");
+                    LOG_DEBUG("ERROR: real GWorld AOB not found");
                 }
             }
 
@@ -2673,29 +3276,27 @@ void Trainer::Tick() {
                             if (lastLoggedGS != gameState || lastLoggedHour != hour24) {
                                 lastLoggedGS = gameState;
                                 lastLoggedHour = hour24;
-                                printf("[TIME] world=%p gs=%p spd=%d hour=%.2f -> %.2f\n",
-                                    world, gameState, secondsPerDay, hour24, timeValue);
+                                LOG_DEBUG("world=%p gs=%p spd=%d hour=%.2f -> %.2f", world, gameState, secondsPerDay, hour24, timeValue);
                             }
                         } else {
                             static bool loggedNullGS = false;
                             if (!loggedNullGS) {
                                 loggedNullGS = true;
-                                printf("[TIME] ERROR: GameState null at world+0x%llX (not in prospect?)\n",
-                                    (unsigned long long)Off::World_GameState);
+                                LOG_DEBUG("ERROR: GameState null at world+0x%llX (not in prospect?)", (unsigned long long)Off::World_GameState);
                             }
                         }
                     } else {
                         static bool loggedNullWorld = false;
                         if (!loggedNullWorld) {
                             loggedNullWorld = true;
-                            printf("[TIME] ERROR: real GWorld is null\n");
+                            LOG_DEBUG("ERROR: real GWorld is null");
                         }
                     }
                 } __except(1) {
                     static bool loggedEx = false;
                     if (!loggedEx) {
                         loggedEx = true;
-                        printf("[TIME] Exception in Time Lock tick\n");
+                        LOG_DEBUG("Exception in Time Lock tick");
                     }
                 }
             }
@@ -2710,7 +3311,7 @@ void Trainer::Tick() {
 
         if (FreeCraft != m_prevFreeCraft) {
             ResetFreeCraftTelemetry();
-            printf("[FREECRAFT] %s\n", FreeCraft ? "enabled" : "disabled");
+            LOG_FC("%s", FreeCraft ? "enabled" : "disabled");
             m_prevFreeCraft = FreeCraft;
         }
 
@@ -2790,8 +3391,7 @@ void Trainer::PatchSetHealth(bool enable) {
                 m_setHealthPatched = true; // Already patched
                 return;
             }
-            printf("[PATCH] SetHealth bytes mismatch: %02X %02X %02X - skipping\n",
-                check[0], check[1], check[2]);
+            LOG_PATCH("SetHealth bytes mismatch: %02X %02X %02X - skipping", check[0], check[1], check[2]);
             return;
         }
         // Save 6 original bytes and NOP the write instruction
@@ -2801,7 +3401,7 @@ void Trainer::PatchSetHealth(bool enable) {
         memset(reinterpret_cast<void*>(m_setHealthAddr), 0x90, 6); // 6x NOP
         VirtualProtect(reinterpret_cast<void*>(m_setHealthAddr), 6, oldP, &oldP);
         m_setHealthPatched = true;
-        printf("[PATCH] Health write NOPed (god mode ON)\n");
+        LOG_PATCH("Health write NOPed (god mode ON)");
     }
     else if (!enable && m_setHealthPatched) {
         DWORD oldP;
@@ -2809,7 +3409,7 @@ void Trainer::PatchSetHealth(bool enable) {
         memcpy(reinterpret_cast<void*>(m_setHealthAddr), m_setHealthBackup, 6);
         VirtualProtect(reinterpret_cast<void*>(m_setHealthAddr), 6, oldP, &oldP);
         m_setHealthPatched = false;
-        printf("[PATCH] Health write restored (god mode OFF)\n");
+        LOG_PATCH("Health write restored (god mode OFF)");
     }
 }
 
@@ -2824,14 +3424,14 @@ void Trainer::PatchBytes(uintptr_t addr, const uint8_t* patch, uint8_t* backup, 
         memcpy(reinterpret_cast<void*>(addr), patch, size);
         VirtualProtect(reinterpret_cast<void*>(addr), size, oldP, &oldP);
         patched = true;
-        printf("[PATCH] %s patched\n", name);
+        LOG_PATCH("%s patched", name);
     } else if (!enable && patched) {
         DWORD oldP;
         VirtualProtect(reinterpret_cast<void*>(addr), size, PAGE_EXECUTE_READWRITE, &oldP);
         memcpy(reinterpret_cast<void*>(addr), backup, size);
         VirtualProtect(reinterpret_cast<void*>(addr), size, oldP, &oldP);
         patched = false;
-        printf("[PATCH] %s restored\n", name);
+        LOG_PATCH("%s restored", name);
     }
 }
 
@@ -2894,8 +3494,7 @@ void Trainer::PatchRemoveItem(bool enable) {
         // Read and log current bytes
         uint8_t current[4];
         memcpy(current, reinterpret_cast<void*>(m_removeItemAddr), 4);
-        printf("[PATCH] ConsumeItem at 0x%p: bytes = %02X %02X %02X %02X\n",
-            (void*)m_removeItemAddr, current[0], current[1], current[2], current[3]);
+        LOG_PATCH("ConsumeItem at 0x%p: bytes = %02X %02X %02X %02X", (void*)m_removeItemAddr, current[0], current[1], current[2], current[3]);
 
         memcpy(m_removeItemBackup, current, 4);
         DWORD oldP;
@@ -2905,8 +3504,7 @@ void Trainer::PatchRemoveItem(bool enable) {
 
         // Verify
         memcpy(current, reinterpret_cast<void*>(m_removeItemAddr), 4);
-        printf("[PATCH] After NOP: %02X %02X %02X %02X %s\n",
-            current[0], current[1], current[2], current[3],
+        LOG_PATCH("After NOP: %02X %02X %02X %02X %s", current[0], current[1], current[2], current[3],
             (current[0] == 0x90) ? "(OK!)" : "(FAILED!)");
 
         m_removeItemPatched = true;
@@ -2916,7 +3514,7 @@ void Trainer::PatchRemoveItem(bool enable) {
         memcpy(reinterpret_cast<void*>(m_removeItemAddr), m_removeItemBackup, 4);
         VirtualProtect(reinterpret_cast<void*>(m_removeItemAddr), 4, oldP, &oldP);
         m_removeItemPatched = false;
-        printf("[PATCH] RemoveItem restored\n");
+        LOG_PATCH("RemoveItem restored");
     }
 }
 
@@ -2945,7 +3543,7 @@ void Trainer::StartPipeServer() {
 
 DWORD WINAPI Trainer::PipeServerThread(LPVOID param) {
     Trainer* self = static_cast<Trainer*>(param);
-    printf("[PIPE] Server started on \\\\.\\pipe\\ZeusModPipe\n");
+    LOG_PIPE("Server started on \\\\.\\pipe\\ZeusModPipe");
 
     while (true) {
         HANDLE pipe = CreateNamedPipeW(
@@ -2982,8 +3580,14 @@ DWORD WINAPI Trainer::PipeServerThread(LPVOID param) {
                     else if (strcmp(cmd, "speed_mult") == 0) self->SpeedMultiplier = fv;
                     else if (strcmp(cmd, "time") == 0) self->TimeLock = (v != 0);
                     else if (strcmp(cmd, "time_val") == 0) self->LockedTime = fv;
+                    else if (strcmp(cmd, "temp") == 0) self->StableTemperature = (v != 0);
+                    else if (strcmp(cmd, "temp_val") == 0) self->StableTempValue = v;
+                    else if (strcmp(cmd, "megaexp") == 0) self->MegaExp = (v != 0);
+                    else if (strcmp(cmd, "talent") == 0) self->MaxTalentPoints = (v != 0);
+                    else if (strcmp(cmd, "tech") == 0) self->MaxTechPoints = (v != 0);
+                    else if (strcmp(cmd, "solo") == 0) self->MaxSoloPoints = (v != 0);
 
-                    printf("[PIPE] %s = %s\n", cmd, val);
+                    LOG_PIPE("%s = %s", cmd, val);
                     const char* ok = "OK";
                     DWORD written;
                     WriteFile(pipe, ok, 2, &written, nullptr);

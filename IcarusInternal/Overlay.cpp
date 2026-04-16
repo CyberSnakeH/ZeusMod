@@ -4,6 +4,7 @@
 // ============================================================================
 #include "Overlay.h"
 #include "Trainer.h"
+#include "Logger.h"
 #include <cstdio>
 #include <cmath>
 
@@ -26,7 +27,8 @@ namespace C {
 }
 
 static constexpr int OVL_W = 280;
-static constexpr int OVL_H = 432;
+static constexpr int OVL_H = 484;
+static constexpr int OVL_ROW_COUNT = 12;
 
 static HWND g_overlay = nullptr;
 static bool g_visible = false;
@@ -38,7 +40,7 @@ static HFONT g_fontBold = nullptr;
 
 // Toggle hit areas
 struct ToggleArea { RECT rc; int idx; };
-static ToggleArea g_toggles[10]{};
+static ToggleArea g_toggles[OVL_ROW_COUNT]{};
 
 // ============================================================================
 // Drawing helpers
@@ -139,9 +141,11 @@ static void OnPaint(HDC hdc) {
         {L"Free Craft",      &t.FreeCraft},
         {L"No Weight",       &t.NoWeight},
         {L"Time Lock",       &t.TimeLock},
+        {L"Stable Temp",     &t.StableTemperature},
+        {L"Mega Exp",        &t.MegaExp},
     };
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < OVL_ROW_COUNT; i++) {
         // Dot
         COLORREF dotC = *rows[i].flag ? C::Green : C::TextSec;
         HBRUSH db = CreateSolidBrush(dotC);
@@ -226,20 +230,21 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 
         bool* flags[] = {
             &t.GodMode, &t.InfiniteStamina, &t.InfiniteArmor, &t.InfiniteOxygen,
-            &t.InfiniteFood, &t.InfiniteWater, &t.SpeedHack, &t.FreeCraft, &t.NoWeight, &t.TimeLock
+            &t.InfiniteFood, &t.InfiniteWater, &t.SpeedHack, &t.FreeCraft, &t.NoWeight, &t.TimeLock,
+            &t.StableTemperature, &t.MegaExp
         };
         const char* names[] = {
             "GodMode", "Stamina", "Armor", "Oxygen", "Food",
-            "Water", "Speed", "Craft", "Weight", "TimeLock"
+            "Water", "Speed", "Craft", "Weight", "TimeLock",
+            "StableTemp", "MegaExp"
         };
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < OVL_ROW_COUNT; i++) {
             if (PtInRect(&g_toggles[i].rc, pt)) {
                 *flags[i] = !*flags[i];
-                printf("[TOGGLE] %s: %s\n", names[i], *flags[i] ? "ON" : "OFF");
+                LOG_DEBUG("%s: %s", names[i], *flags[i] ? "ON" : "OFF");
                 if (i == 9 && *flags[i]) {
-                    printf("[TIME] Current target: %.0f:00 (right click to cycle 06 -> 12 -> 18 -> 00)\n",
-                        t.LockedTime);
+                    LOG_DEBUG("Current target: %.0f:00 (right click to cycle 06 -> 12 -> 18 -> 00)", t.LockedTime);
                 }
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
@@ -256,7 +261,7 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             else if (t2.LockedTime < 12.0f) t2.LockedTime = 12.0f;
             else if (t2.LockedTime < 18.0f) t2.LockedTime = 18.0f;
             else t2.LockedTime = 0.0f;
-            printf("[TIME] Set to %.0f:00\n", t2.LockedTime);
+            LOG_DEBUG("Set to %.0f:00", t2.LockedTime);
             InvalidateRect(hwnd, nullptr, FALSE);
         }
         return 0;

@@ -5,6 +5,7 @@
 
 #include "UObjectLookup.h"
 #include "UE4.h"
+#include "Logger.h"
 #include "libs/minhook/src/hde/hde64.h"
 #include <Windows.h>
 #include <Psapi.h>
@@ -163,8 +164,7 @@ static uintptr_t ScanGObjects() {
         if (!SafeRead(resolved + OFF_OBJ_ARRAY_OBJECTS, objsPtr)) continue;
         if (!IsHeapPtr(objsPtr)) continue;
 
-        printf("[UObjLookup] GObjects @ 0x%p (NumElements=%d) via AOB hit 0x%p\n",
-            (void*)resolved, numElems, (void*)hit);
+        LOG_UOBJ("GObjects @ 0x%p (NumElements=%d) via AOB hit 0x%p", (void*)resolved, numElems, (void*)hit);
         return resolved;
     }
     return 0;
@@ -255,8 +255,7 @@ static uintptr_t ScanHeapForByteProperty() {
 
                     if (foundInt || foundInt8) {
                         DWORD ms = GetTickCount() - startTick;
-                        printf("[UObjLookup] ByteProperty FNamePool block validated at 0x%p (foundInt=%d foundInt8=%d) after %d regions, %zu MB, %ums\n",
-                            (const void*)p, (int)foundInt, (int)foundInt8,
+                        LOG_UOBJ("ByteProperty FNamePool block validated at 0x%p (foundInt=%d foundInt8=%d) after %d regions, %zu MB, %ums", (const void*)p, (int)foundInt, (int)foundInt8,
                             regionsScanned, bytesScanned / (1024 * 1024), ms);
                         return reinterpret_cast<uintptr_t>(p);
                     }
@@ -265,8 +264,7 @@ static uintptr_t ScanHeapForByteProperty() {
             } __except(EXCEPTION_EXECUTE_HANDLER) {}
 
             if ((regionsScanned % 1000) == 0) {
-                printf("[UObjLookup]   ...scanned %d regions, %zu MB, %d ByteProperty candidates, %u ms\n",
-                    regionsScanned, bytesScanned / (1024 * 1024), candidatesFound,
+                LOG_UOBJ("  ...scanned %d regions, %zu MB, %d ByteProperty candidates, %u ms", regionsScanned, bytesScanned / (1024 * 1024), candidatesFound,
                     GetTickCount() - startTick);
             }
         }
@@ -275,8 +273,7 @@ static uintptr_t ScanHeapForByteProperty() {
     }
 
     DWORD ms = GetTickCount() - startTick;
-    printf("[UObjLookup] Heap scan done: %d regions, %zu MB, %d ByteProperty candidates, %ums — NO valid FNamePool block found\n",
-        regionsScanned, bytesScanned / (1024 * 1024), candidatesFound, ms);
+    LOG_UOBJ("Heap scan done: %d regions, %zu MB, %d ByteProperty candidates, %ums — NO valid FNamePool block found", regionsScanned, bytesScanned / (1024 * 1024), candidatesFound, ms);
     return 0;
 }
 
@@ -289,7 +286,7 @@ static bool DetectFNamePoolFormatFromBP(uintptr_t bpAddr) {
     {
         uint8_t buf[64] = {};
         if (SafeReadBytes(bpAddr - 32, buf, 64)) {
-            printf("[UObjLookup] BP context (-32..+32, BP at offset 32):\n[UObjLookup]   ");
+            LOG_UOBJ("BP context (-32..+32, BP at offset 32):\n[UObjLookup]");
             for (int i = 0; i < 64; ++i) {
                 if (i == 32) printf("|");
                 printf("%02X ", buf[i]);
@@ -330,8 +327,7 @@ static bool DetectFNamePoolFormatFromBP(uintptr_t bpAddr) {
                     s_headerOffset = dist - hdrSize; // bytes between header end and string start
                     s_lenShift = 0;
                     s_lenMask  = 0xFF;
-                    printf("[UObjLookup] Format: 1-byte length=12 at BP-%d (hdr→string gap=%d)\n",
-                        dist, s_headerOffset);
+                    LOG_UOBJ("Format: 1-byte length=12 at BP-%d (hdr→string gap=%d)", dist, s_headerOffset);
                     return true;
                 }
             } else if (hdrSize == 2) {
@@ -343,8 +339,7 @@ static bool DetectFNamePoolFormatFromBP(uintptr_t bpAddr) {
                         s_headerOffset = dist - hdrSize;
                         s_lenShift = sh.shift;
                         s_lenMask  = sh.mask;
-                        printf("[UObjLookup] Format: 2-byte hdr=0x%04X (shift=%d len=12) at BP-%d (gap=%d)\n",
-                            v, sh.shift, dist, s_headerOffset);
+                        LOG_UOBJ("Format: 2-byte hdr=0x%04X (shift=%d len=12) at BP-%d (gap=%d)", v, sh.shift, dist, s_headerOffset);
                         return true;
                     }
                 }
@@ -355,15 +350,14 @@ static bool DetectFNamePoolFormatFromBP(uintptr_t bpAddr) {
                     s_headerOffset = dist - hdrSize;
                     s_lenShift = 0;
                     s_lenMask  = 0xFFFF;
-                    printf("[UObjLookup] Format: 4-byte hdr=0x%08X contains 12 at BP-%d (gap=%d)\n",
-                        v, dist, s_headerOffset);
+                    LOG_UOBJ("Format: 4-byte hdr=0x%08X contains 12 at BP-%d (gap=%d)", v, dist, s_headerOffset);
                     return true;
                 }
             }
         }
     }
 
-    printf("[UObjLookup] Could not detect FNamePool format from BP context\n");
+    LOG_UOBJ("Could not detect FNamePool format from BP context");
     return false;
 }
 
@@ -460,8 +454,7 @@ static uintptr_t ScanModuleForBlocksArray() {
         uintptr_t end = start + sz;
         sectionsScanned++;
 
-        printf("[UObjLookup]   scanning '%s' [0x%p..0x%p]\n",
-            name, (void*)start, (void*)end);
+        LOG_UOBJ("  scanning '%s' [0x%p..0x%p]", name, (void*)start, (void*)end);
 
         for (uintptr_t p = start; p + 64 <= end; p += 8) {
             uintptr_t v0 = 0;
@@ -496,11 +489,9 @@ static uintptr_t ScanModuleForBlocksArray() {
             SafeReadBytes(v0, buf, 64);
 
             DWORD ms = GetTickCount() - startTick;
-            printf("[UObjLookup] FOUND FNamePool.Blocks[] @ 0x%p in section '%s' (heapCount=%d, hashOff=%d, shift=%d, %ums)\n",
-                (void*)p, name, heapCount, s_headerOffset, s_lenShift, ms);
-            printf("[UObjLookup]   block 0 = 0x%p (64KB-aligned), 'None' at +%d, 'ByteProperty' validated\n",
-                (void*)v0, noneOffset);
-            printf("[UObjLookup]   block 0 first 64 bytes:\n[UObjLookup]   ");
+            LOG_UOBJ("FOUND FNamePool.Blocks[] @ 0x%p in section '%s' (heapCount=%d, hashOff=%d, shift=%d, %ums)", (void*)p, name, heapCount, s_headerOffset, s_lenShift, ms);
+            LOG_UOBJ("  block 0 = 0x%p (64KB-aligned), 'None' at +%d, 'ByteProperty' validated", (void*)v0, noneOffset);
+            LOG_UOBJ("  block 0 first 64 bytes:\n[UObjLookup]");
             for (int j = 0; j < 64; ++j) {
                 printf("%02X ", buf[j]);
                 if ((j + 1) % 16 == 0 && j != 63) printf("\n[UObjLookup]   ");
@@ -517,8 +508,7 @@ static uintptr_t ScanModuleForBlocksArray() {
     }
 
     DWORD ms = GetTickCount() - startTick;
-    printf("[UObjLookup] Module scan done: %d sections, %d candidates, %d validated, %ums — no Blocks[] found\n",
-        sectionsScanned, candidatesChecked, candidatesValidated, ms);
+    LOG_UOBJ("Module scan done: %d sections, %d candidates, %d validated, %ums — no Blocks[] found", sectionsScanned, candidatesChecked, candidatesValidated, ms);
     return 0;
 }
 
@@ -532,10 +522,10 @@ static void DumpBytesBefore(uintptr_t addr, int count) {
     uint8_t buf[64] = {};
     if (count > 64) count = 64;
     if (!SafeReadBytes(start, buf, count)) {
-        printf("[UObjLookup]   pre-None dump: read failed at 0x%p\n", (void*)start);
+        LOG_UOBJ("  pre-None dump: read failed at 0x%p", (void*)start);
         return;
     }
-    printf("[UObjLookup]   pre-None bytes (0x%p..0x%p):\n[UObjLookup]   ", (void*)start, (void*)addr);
+    LOG_UOBJ("  pre-None bytes (0x%p..0x%p):\n[UObjLookup]", (void*)start, (void*)addr);
     for (int i = 0; i < count; ++i) printf("%02X ", buf[i]);
     printf("\n");
 }
@@ -566,8 +556,7 @@ static uintptr_t FindStaticPointerToCandidates(
         if (!sz) sz = sec[i].SizeOfRawData;
         uintptr_t end = start + sz;
 
-        printf("[UObjLookup]   scanning section '%s' [0x%p..0x%p] (%zu bytes)\n",
-            name, (void*)start, (void*)end, sz);
+        LOG_UOBJ("  scanning section '%s' [0x%p..0x%p] (%zu bytes)", name, (void*)start, (void*)end, sz);
 
         for (uintptr_t p = start; p + 8 <= end; p += 8) {
             uintptr_t value = 0;
@@ -575,8 +564,7 @@ static uintptr_t FindStaticPointerToCandidates(
             for (uintptr_t cand : candidates) {
                 if (value == cand) {
                     outMatchValue = cand;
-                    printf("[UObjLookup]   match in section '%s' at 0x%p -> 0x%p\n",
-                        name, (void*)p, (void*)cand);
+                    LOG_UOBJ("  match in section '%s' at 0x%p -> 0x%p", name, (void*)p, (void*)cand);
                     return p;
                 }
             }
@@ -596,8 +584,7 @@ static uintptr_t FindFNamePoolFromNoneEntry(uintptr_t insideBlockAddr) {
     constexpr uintptr_t BLOCK_SIZE = 0x20000; // 128 KB
     uintptr_t windowLo = insideBlockAddr > BLOCK_SIZE ? insideBlockAddr - BLOCK_SIZE : 0;
     uintptr_t windowHi = insideBlockAddr;
-    printf("[UObjLookup]   block start window: [0x%p..0x%p]\n",
-        (void*)windowLo, (void*)windowHi);
+    LOG_UOBJ("  block start window: [0x%p..0x%p]", (void*)windowLo, (void*)windowHi);
 
     // Scan module non-executable sections for an 8-byte value within window.
     auto mod = GetModuleHandleW(nullptr);
@@ -620,7 +607,7 @@ static uintptr_t FindFNamePoolFromNoneEntry(uintptr_t insideBlockAddr) {
         if (!sz) sz = sec[i].SizeOfRawData;
         uintptr_t end = start + sz;
 
-        printf("[UObjLookup]   scanning '%s' [0x%p..0x%p]\n", name, (void*)start, (void*)end);
+        LOG_UOBJ("  scanning '%s' [0x%p..0x%p]", name, (void*)start, (void*)end);
 
         for (uintptr_t p = start; p + 8 <= end; p += 8) {
             uintptr_t value = 0;
@@ -631,20 +618,18 @@ static uintptr_t FindFNamePoolFromNoneEntry(uintptr_t insideBlockAddr) {
 
             ptrLoc = p;
             block0Found = value;
-            printf("[UObjLookup]   match: section '%s' @ 0x%p -> block 0x%p\n",
-                name, (void*)p, (void*)value);
+            LOG_UOBJ("  match: section '%s' @ 0x%p -> block 0x%p", name, (void*)p, (void*)value);
             break;
         }
     }
 
     if (!ptrLoc) {
-        printf("[UObjLookup]   no static pointer to FNamePool block 0 found\n");
+        LOG_UOBJ("  no static pointer to FNamePool block 0 found");
         return 0;
     }
 
     int blockDelta = static_cast<int>(static_cast<intptr_t>(insideBlockAddr - block0Found));
-    printf("[UObjLookup]   FNamePool block 0 = 0x%p, BP string is +%d bytes inside\n",
-        (void*)block0Found, blockDelta);
+    LOG_UOBJ("  FNamePool block 0 = 0x%p, BP string is +%d bytes inside", (void*)block0Found, blockDelta);
 
     // ptrLoc is &FNamePool.Blocks[0]. Try common chunksOffsets.
     uintptr_t modBase = reinterpret_cast<uintptr_t>(mod);
@@ -655,8 +640,7 @@ static uintptr_t FindFNamePoolFromNoneEntry(uintptr_t insideBlockAddr) {
         if (!SafeRead(poolCandidate + co + 8, block1)) continue;
         if (block1 == 0 || IsHeapPtr(block1)) {
             s_chunksOffset = co;
-            printf("[UObjLookup] FNamePool struct @ 0x%p (Blocks at 0x%p, ChunksOff=0x%X)\n",
-                (void*)poolCandidate, (void*)ptrLoc, co);
+            LOG_UOBJ("FNamePool struct @ 0x%p (Blocks at 0x%p, ChunksOff=0x%X)", (void*)poolCandidate, (void*)ptrLoc, co);
             return poolCandidate;
         }
     }
@@ -677,8 +661,7 @@ static uintptr_t ScanFNamePool() {
         uintptr_t poolCandidate = blocksArrayAddr - co;
         // Sanity: Blocks[1] at Blocks_ptr + 8 is already validated by caller
         s_chunksOffset = co;
-        printf("[UObjLookup] FNamePool struct @ 0x%p (Blocks at 0x%p, ChunksOff=0x%X)\n",
-            (void*)poolCandidate, (void*)blocksArrayAddr, co);
+        LOG_UOBJ("FNamePool struct @ 0x%p (Blocks at 0x%p, ChunksOff=0x%X)", (void*)poolCandidate, (void*)blocksArrayAddr, co);
         return poolCandidate;
     }
     return 0;
@@ -754,8 +737,7 @@ static bool DetectFNamePoolLayout() {
 
                     std::string name0 = ResolveFNameIndex(0);
                     if (name0 == "None") {
-                        printf("[UObjLookup] FNamePool layout: ChunksOff=0x%X hdrOff=%d shift=%d mask=0x%X stride=%d\n",
-                            chunksOff, hdrOff, sh.shift, sh.mask, stride);
+                        LOG_UOBJ("FNamePool layout: ChunksOff=0x%X hdrOff=%d shift=%d mask=0x%X stride=%d", chunksOff, hdrOff, sh.shift, sh.mask, stride);
                         return true;
                     }
                 }
@@ -764,15 +746,15 @@ static bool DetectFNamePoolLayout() {
     }
 
     // Detection failed — dump first 64 bytes of the first block for diagnosis.
-    printf("[UObjLookup] FNamePool detection FAILED after %d combos. Block dump:\n", triedCombos);
+    LOG_UOBJ("FNamePool detection FAILED after %d combos. Block dump:", triedCombos);
     for (int chunksOff : chunkOffsets) {
         uintptr_t blockPtr = 0;
         if (!SafeRead(s_gnamesAddr + chunksOff, blockPtr)) continue;
         if (!IsHeapPtr(blockPtr)) continue;
-        printf("[UObjLookup]   pool+0x%02X -> block 0x%p:\n", chunksOff, (void*)blockPtr);
+        LOG_UOBJ("  pool+0x%02X -> block 0x%p:", chunksOff, (void*)blockPtr);
         uint8_t buf[64] = {};
         if (SafeReadBytes(blockPtr, buf, 64)) {
-            printf("[UObjLookup]     ");
+            LOG_UOBJ("");
             for (int i = 0; i < 64; ++i) {
                 printf("%02X ", buf[i]);
                 if ((i + 1) % 16 == 0) printf("\n[UObjLookup]     ");
@@ -1076,28 +1058,25 @@ uintptr_t ResolveThunkToImpl(uintptr_t thunkAddr) {
 
 uintptr_t FindNativeFunction(const char* className, const char* funcName) {
     if (!s_initialized) {
-        printf("[UObjLookup] FindNativeFunction(%s::%s): not initialized\n",
-            className, funcName);
+        LOG_UOBJ("FindNativeFunction(%s::%s): not initialized", className, funcName);
         return 0;
     }
 
     uintptr_t cls = FindClassByName(className);
     if (!cls) {
-        printf("[UObjLookup] FindNativeFunction: class '%s' not found\n", className);
+        LOG_UOBJ("FindNativeFunction: class '%s' not found", className);
         return 0;
     }
 
     uintptr_t ufunc = FindFunctionInClass(cls, funcName);
     if (!ufunc) {
-        printf("[UObjLookup] FindNativeFunction: %s.%s not found in class\n",
-            className, funcName);
+        LOG_UOBJ("FindNativeFunction: %s.%s not found in class", className, funcName);
         return 0;
     }
 
     uintptr_t thunk = GetUFunctionNativeAddr(ufunc);
     if (!thunk) {
-        printf("[UObjLookup] %s.%s: UFunc=0x%p but Func ptr invalid\n",
-            className, funcName, (void*)ufunc);
+        LOG_UOBJ("%s.%s: UFunc=0x%p but Func ptr invalid", className, funcName, (void*)ufunc);
         return 0;
     }
 
@@ -1106,8 +1085,7 @@ uintptr_t FindNativeFunction(const char* className, const char* funcName) {
     if (impl) return impl;
 
     // Fallback: return the thunk if impl resolution failed.
-    printf("[UObjLookup] %s.%s: thunk=0x%p impl resolve FAILED, returning thunk\n",
-        className, funcName, (void*)thunk);
+    LOG_UOBJ("%s.%s: thunk=0x%p impl resolve FAILED, returning thunk", className, funcName, (void*)thunk);
     return thunk;
 }
 
@@ -1160,7 +1138,7 @@ int32_t FindPropertyOffset(const char* className, const char* propName) {
 
     uintptr_t cls = FindClassByName(className);
     if (!cls) {
-        printf("[UObjLookup] FindPropertyOffset: class '%s' not found\n", className);
+        LOG_UOBJ("FindPropertyOffset: class '%s' not found", className);
         return -1;
     }
 
@@ -1168,7 +1146,7 @@ int32_t FindPropertyOffset(const char* className, const char* propName) {
     while (cls && hops < 16) {
         int32_t offset = FindPropertyOffsetInClass(cls, propName);
         if (offset >= 0) {
-            printf("[UObjLookup] %s::%s -> +0x%X\n", className, propName, offset);
+            LOG_UOBJ("%s::%s -> +0x%X", className, propName, offset);
             return offset;
         }
         // Walk to parent class via UStruct::Super
@@ -1178,8 +1156,7 @@ int32_t FindPropertyOffset(const char* className, const char* propName) {
         hops++;
     }
 
-    printf("[UObjLookup] %s::%s NOT FOUND (walked %d parent classes)\n",
-        className, propName, hops);
+    LOG_UOBJ("%s::%s NOT FOUND (walked %d parent classes)", className, propName, hops);
     return -1;
 }
 
@@ -1197,7 +1174,7 @@ void DumpClassesContaining(const char* substring, int maxResults) {
 
     int total = GetObjectCount();
     int found = 0;
-    printf("[UObjLookup] === DumpClassesContaining('%s') ===\n", substring);
+    LOG_UOBJ("=== DumpClassesContaining('%s') ===", substring);
 
     for (int32_t i = 0; i < total && found < maxResults; ++i) {
         uintptr_t obj = GetObjectByIndex(i);
@@ -1215,11 +1192,10 @@ void DumpClassesContaining(const char* substring, int maxResults) {
         StrLowerInPlace(lname);
         if (lname.find(needle) == std::string::npos) continue;
 
-        printf("[UObjLookup]   [%d] %s @ 0x%p (kind=%s)\n",
-            i, name.c_str(), (void*)obj, clsOfObj.c_str());
+        LOG_UOBJ("  [%d] %s @ 0x%p (kind=%s)", i, name.c_str(), (void*)obj, clsOfObj.c_str());
         found++;
     }
-    printf("[UObjLookup] === %d match(es) ===\n", found);
+    LOG_UOBJ("=== %d match(es) ===", found);
 }
 
 void DumpFunctionsOf(uintptr_t uclassAddr, int maxResults) {
@@ -1227,27 +1203,26 @@ void DumpFunctionsOf(uintptr_t uclassAddr, int maxResults) {
 
     uintptr_t child = 0;
     if (!SafeRead(uclassAddr + OFF_USTRUCT_CHILDREN, child) || !child) {
-        printf("[UObjLookup] DumpFunctionsOf: class @ 0x%p has no Children\n", (void*)uclassAddr);
+        LOG_UOBJ("DumpFunctionsOf: class @ 0x%p has no Children", (void*)uclassAddr);
         return;
     }
 
     int found = 0;
     int safety = 4096;
-    printf("[UObjLookup] === DumpFunctionsOf(0x%p) ===\n", (void*)uclassAddr);
+    LOG_UOBJ("=== DumpFunctionsOf(0x%p) ===", (void*)uclassAddr);
     while (child && safety-- > 0 && found < maxResults) {
         std::string clsName = GetObjectClassName(child);
         if (clsName == "Function") {
             std::string name = GetObjectName(child);
             uintptr_t native = GetUFunctionNativeAddr(child);
-            printf("[UObjLookup]   %s @ 0x%p (Native=0x%p)\n",
-                name.c_str(), (void*)child, (void*)native);
+            LOG_UOBJ("  %s @ 0x%p (Native=0x%p)", name.c_str(), (void*)child, (void*)native);
             found++;
         }
         uintptr_t next = 0;
         if (!SafeRead(child + OFF_UFIELD_NEXT, next)) break;
         child = next;
     }
-    printf("[UObjLookup] === %d function(s) ===\n", found);
+    LOG_UOBJ("=== %d function(s) ===", found);
 }
 
 // === Init ==================================================================
@@ -1260,18 +1235,17 @@ bool Initialize() {
     MODULEINFO info{};
     GetModuleInformation(GetCurrentProcess(), mod, &info, sizeof(info));
     s_moduleSize = info.SizeOfImage;
-    printf("[UObjLookup] module base=0x%p size=0x%zX\n",
-        (void*)s_moduleBase, s_moduleSize);
+    LOG_UOBJ("module base=0x%p size=0x%zX", (void*)s_moduleBase, s_moduleSize);
 
     s_gobjectsAddr = ScanGObjects();
     if (!s_gobjectsAddr) {
-        printf("[UObjLookup] ERROR: failed to find GObjects\n");
+        LOG_UOBJ("ERROR: failed to find GObjects");
         return false;
     }
 
     s_gnamesAddr = ScanFNamePool();
     if (!s_gnamesAddr) {
-        printf("[UObjLookup] ERROR: failed to find FNamePool via heap scan\n");
+        LOG_UOBJ("ERROR: failed to find FNamePool via heap scan");
         return false;
     }
     // ScanFNamePool already set s_chunksOffset and s_lenShift via the
@@ -1280,14 +1254,14 @@ bool Initialize() {
     // Final sanity check using the resolved layout
     std::string none = ResolveFNameIndex(0);
     std::string name1 = ResolveFNameIndex(1);
-    printf("[UObjLookup] FName[0]='%s' FName[1]='%s'\n", none.c_str(), name1.c_str());
+    LOG_UOBJ("FName[0]='%s' FName[1]='%s'", none.c_str(), name1.c_str());
 
     if (none != "None") {
-        printf("[UObjLookup] WARNING: FName[0] != 'None' after layout detection\n");
+        LOG_UOBJ("WARNING: FName[0] != 'None' after layout detection");
     }
 
     s_initialized = true;
-    printf("[UObjLookup] initialized OK (objects=%d)\n", GetObjectCount());
+    LOG_UOBJ("initialized OK (objects=%d)", GetObjectCount());
     return true;
 }
 

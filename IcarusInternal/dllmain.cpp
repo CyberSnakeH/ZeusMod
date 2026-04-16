@@ -2,6 +2,7 @@
 #include "Trainer.h"
 #include "Overlay.h"
 #include "Render.h"
+#include "Logger.h"
 
 static HMODULE g_module = nullptr;
 static bool g_running = true;
@@ -28,7 +29,7 @@ static DWORD WINAPI MainThread(LPVOID) {
 
     Trainer::Get().Initialize();
     if (!Render::Initialize()) {
-        printf("[RENDER] Falling back to legacy overlay.\n");
+        LOG_RENDER("Falling back to legacy overlay.");
         g_usingLegacyOverlay = Overlay::Create();
     }
 

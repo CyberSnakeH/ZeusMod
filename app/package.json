@@ -1,6 +1,6 @@
 {
   "name": "zeusmod",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "ZeusMod desktop launcher and updater for Icarus",
   "main": "main.js",
   "author": "CyberSnake",

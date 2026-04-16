@@ -1,5 +1,6 @@
 #include "Render.h"
 #include "Trainer.h"
+#include "Logger.h"
 #include "libs/minhook/include/MinHook.h"
 #include "libs/imgui/imgui.h"
 #include "libs/imgui/imgui_impl_win32.h"
@@ -225,6 +226,12 @@ void DrawMenu() {
         ImGui::Spacing();
         ImGui::Checkbox("Enable Speed Override", &trainer.SpeedHack);
         ImGui::SliderFloat("Speed Multiplier", &trainer.SpeedMultiplier, 1.0f, 6.0f, "x%.1f");
+
+        ImGui::Spacing();
+        ImGui::TextColored(Accent(), "Progression");
+        ImGui::TextDisabled("Experience pump — grants +50 000 XP/tick and clamps Level.");
+        ImGui::Spacing();
+        DrawFeatureRow("megaexp", "Mega Exp", "Grants XP continuously so the character levels up visibly.", &trainer.MegaExp);
         ImGui::EndChild();
 
         ImGui::TableNextColumn();
@@ -235,6 +242,8 @@ void DrawMenu() {
         DrawFeatureRow("oxygen", "Infinite Oxygen", "Keeps oxygen at its maximum level.", &trainer.InfiniteOxygen);
         DrawFeatureRow("food", "Infinite Food", "Keeps the nutrition bar full.", &trainer.InfiniteFood);
         DrawFeatureRow("water", "Infinite Water", "Keeps hydration fully restored.", &trainer.InfiniteWater);
+        DrawFeatureRow("temp",  "Stable Temperature", "Clamps ModifiedInternalTemperature so biome temps are ignored.", &trainer.StableTemperature);
+        ImGui::SliderInt("Target Temperature (C)", &trainer.StableTempValue, -40, 60, "%d C");
 
         ImGui::Spacing();
         ImGui::TextColored(Accent(), "Temporal Lock");
@@ -302,14 +311,14 @@ bool InitDX11(IDXGISwapChain* swapChain) {
     ImGui_ImplWin32_Init(g_hwnd);
     ImGui_ImplDX11_Init(g_d11Device, g_d11Context);
     g_originalWndProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(HookedWndProc)));
-    printf("[RENDER] DX11 ImGui initialized.\n");
+    LOG_RENDER("DX11 ImGui initialized.");
     return true;
 }
 
 bool InitDX12(IDXGISwapChain* swapChain) {
     HRESULT hr = swapChain->GetDevice(__uuidof(ID3D12Device), reinterpret_cast<void**>(&g_d12Device));
     if (FAILED(hr) || !g_d12Device) {
-        printf("[RENDER] GetDevice(DX12) failed: 0x%lX\n", hr);
+        LOG_RENDER("GetDevice(DX12) failed: 0x%lX", hr);
         return false;
     }
 
@@ -322,7 +331,7 @@ bool InitDX12(IDXGISwapChain* swapChain) {
         qDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         hr = g_d12Device->CreateCommandQueue(&qDesc, __uuidof(ID3D12CommandQueue), reinterpret_cast<void**>(&g_d12CmdQueue));
         if (FAILED(hr) || !g_d12CmdQueue) {
-            printf("[RENDER] DX12 queue creation failed: 0x%lX\n", hr);
+            LOG_RENDER("DX12 queue creation failed: 0x%lX", hr);
             return false;
         }
     }
@@ -338,20 +347,20 @@ bool InitDX12(IDXGISwapChain* swapChain) {
         nullptr);
 
     if (FAILED(hr) || !g_d11on12Device || !g_d11on12Context) {
-        printf("[RENDER] D3D11On12CreateDevice failed: 0x%lX\n", hr);
+        LOG_RENDER("D3D11On12CreateDevice failed: 0x%lX", hr);
         return false;
     }
 
     hr = g_d11on12Device->QueryInterface(__uuidof(ID3D11On12Device), reinterpret_cast<void**>(&g_d11on12));
     if (FAILED(hr) || !g_d11on12) {
-        printf("[RENDER] QI ID3D11On12Device failed: 0x%lX\n", hr);
+        LOG_RENDER("QI ID3D11On12Device failed: 0x%lX", hr);
         return false;
     }
 
     ID3D12Resource* d12BackBuffer = nullptr;
     hr = swapChain->GetBuffer(0, __uuidof(ID3D12Resource), reinterpret_cast<void**>(&d12BackBuffer));
     if (FAILED(hr) || !d12BackBuffer) {
-        printf("[RENDER] DX12 GetBuffer failed: 0x%lX\n", hr);
+        LOG_RENDER("DX12 GetBuffer failed: 0x%lX", hr);
         return false;
     }
 
@@ -367,14 +376,14 @@ bool InitDX12(IDXGISwapChain* swapChain) {
     d12BackBuffer->Release();
 
     if (FAILED(hr) || !wrappedBuffer) {
-        printf("[RENDER] CreateWrappedResource failed: 0x%lX\n", hr);
+        LOG_RENDER("CreateWrappedResource failed: 0x%lX", hr);
         return false;
     }
 
     hr = g_d11on12Device->CreateRenderTargetView(wrappedBuffer, nullptr, &g_d12RTV);
     wrappedBuffer->Release();
     if (FAILED(hr) || !g_d12RTV) {
-        printf("[RENDER] DX12 RTV creation failed: 0x%lX\n", hr);
+        LOG_RENDER("DX12 RTV creation failed: 0x%lX", hr);
         return false;
     }
 
@@ -387,7 +396,7 @@ bool InitDX12(IDXGISwapChain* swapChain) {
     ImGui_ImplWin32_Init(g_hwnd);
     ImGui_ImplDX11_Init(g_d11on12Device, g_d11on12Context);
     g_originalWndProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(HookedWndProc)));
-    printf("[RENDER] DX12 ImGui initialized.\n");
+    LOG_RENDER("DX12 ImGui initialized.");
     return true;
 }
 
@@ -408,7 +417,7 @@ HRESULT STDMETHODCALLTYPE HookedPresent(IDXGISwapChain* swapChain, UINT syncInte
         if (!g_imguiReady) {
             static bool logged = false;
             if (!logged) {
-                printf("[RENDER] ImGui init failed. Overlay unavailable.\n");
+                LOG_RENDER("ImGui init failed. Overlay unavailable.");
                 logged = true;
             }
             return g_originalPresent(swapChain, syncInterval, flags);
@@ -514,25 +523,25 @@ bool GetSwapChainVTable(void** vTable) {
 bool Render::Initialize() {
     void* vTable[18]{};
     if (!GetSwapChainVTable(vTable)) {
-        printf("[RENDER] Failed to acquire swapchain vtable.\n");
+        LOG_RENDER("Failed to acquire swapchain vtable.");
         return false;
     }
 
     MH_STATUS init = MH_Initialize();
     if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) {
-        printf("[RENDER] MinHook init failed: %d\n", static_cast<int>(init));
+        LOG_RENDER("MinHook init failed: %d", static_cast<int>(init));
         return false;
     }
 
     MH_STATUS createPresent = MH_CreateHook(vTable[8], HookedPresent, reinterpret_cast<void**>(&g_originalPresent));
     if (createPresent != MH_OK && createPresent != MH_ERROR_ALREADY_CREATED) {
-        printf("[RENDER] Present hook creation failed: %d\n", static_cast<int>(createPresent));
+        LOG_RENDER("Present hook creation failed: %d", static_cast<int>(createPresent));
         return false;
     }
 
     MH_STATUS createResize = MH_CreateHook(vTable[13], HookedResizeBuffers, reinterpret_cast<void**>(&g_originalResizeBuffers));
     if (createResize != MH_OK && createResize != MH_ERROR_ALREADY_CREATED) {
-        printf("[RENDER] ResizeBuffers hook creation failed: %d\n", static_cast<int>(createResize));
+        LOG_RENDER("ResizeBuffers hook creation failed: %d", static_cast<int>(createResize));
         return false;
     }
 
@@ -540,11 +549,11 @@ bool Render::Initialize() {
     MH_STATUS enableResize = MH_EnableHook(vTable[13]);
     if ((enablePresent != MH_OK && enablePresent != MH_ERROR_ENABLED) ||
         (enableResize != MH_OK && enableResize != MH_ERROR_ENABLED)) {
-        printf("[RENDER] Hook enabling failed: present=%d resize=%d\n", static_cast<int>(enablePresent), static_cast<int>(enableResize));
+        LOG_RENDER("Hook enabling failed: present=%d resize=%d", static_cast<int>(enablePresent), static_cast<int>(enableResize));
         return false;
     }
 
-    printf("[RENDER] DirectX overlay armed. Press N to open menu.\n");
+    LOG_RENDER("DirectX overlay armed. Press N to open menu.");
     return true;
 }
 

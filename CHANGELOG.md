@@ -4,6 +4,43 @@ All notable changes to ZeusMod are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-04-17
+
+### Added — Survival
+
+- **Stable Temperature** toggle clamps the player's
+  `SurvivalCharacterState::ModifiedInternalTemperature` every tick to a
+  configurable integer value (default 20°C). This is the exact int the HUD
+  thermometer reads, so the player is no longer affected by hot biomes,
+  cold storms, night drops, or altitude.
+
+### Added — Progression
+
+- **Mega Exp** grants `+50 000` XP per tick on
+  `PlayerCharacterState::TotalExperience` so the character levels up
+  visibly through the game's own level-up gates instead of jumping to
+  max in one frame.
+
+### Added — Plumbing
+
+- `ResolveAllOffsets()` now resolves
+  `SurvivalCharacterState::ModifiedInternalTemperature`,
+  `PlayerCharacterState::TotalExperience`, and `Controller::PlayerState`
+  through `UObjectLookup::FindPropertyOffset`.
+- `FindPlayer()` caches the `PlayerState` pointer alongside the existing
+  character / actor state pointers so progression features don't have to
+  re-walk the world graph every tick.
+- In-game overlay grows from 10 to 12 toggle rows (OVL_H 432 → 484) and
+  the renderer + hit-test tables are driven by a single `OVL_ROW_COUNT`
+  constant to avoid two-loop drift in future edits.
+- Desktop UI gets a new **PROGRESSION** category (Mega Exp) and a new
+  **Stable Temperature** row under **SURVIVAL**.
+- Pipe protocol gains new commands: `temp`, `temp_val`, `megaexp`.
+
+### Changed
+
+- Bumped desktop app to **1.4.0**.
+
 ## [1.3.2] - 2026-04-15
 
 ### Fixed

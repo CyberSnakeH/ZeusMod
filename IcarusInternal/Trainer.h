@@ -55,12 +55,39 @@ namespace Off {
     inline uintptr_t State_MaxStamina = 0;
 
     // USurvivalCharacterState (extends UCharacterState)
+    // Note: TotalExperience, Level and InternalTemperature also live on
+    // SurvivalCharacterState per the SDK dump, not on a PlayerCharacterState
+    // subclass. Using SurvivalCharacterState for lookup is the safe choice.
     inline uintptr_t State_Oxygen = 0;
     inline uintptr_t State_Water = 0;
     inline uintptr_t State_Food = 0;
     inline uintptr_t State_MaxOxygen = 0;
     inline uintptr_t State_MaxWater = 0;
     inline uintptr_t State_MaxFood = 0;
+    inline uintptr_t State_ModInternalTemp = 0; // ModifiedInternalTemperature (HUD)
+    inline uintptr_t State_InternalTemp = 0;    // InternalTemperature (raw, mutated by sim)
+    inline uintptr_t State_TotalExp = 0;        // TotalExperience (int32)
+    inline uintptr_t State_Level = 0;           // Level (int32)
+
+    // AController -> APlayerState (IcarusPlayerState)
+    inline uintptr_t Ctrl_PlayerState = 0;
+
+    // AIcarusPlayerState -> embedded profile structs
+    // Fallback defaults match the current SDK dump; ResolveAllOffsets
+    // replaces them with reflection-walked values when the UPROPERTY is
+    // discoverable on the live class.
+    inline uintptr_t PS_ActiveUserProfile = 0x358; // struct OnlineProfileUser
+    inline uintptr_t PS_ActiveCharacter   = 0x3A0; // struct OnlineProfileCharacter
+
+    // Struct-internal offsets (OnlineProfileCharacter / OnlineProfileUser /
+    // MetaResource). These are not UClass properties so they can't be
+    // resolved through FindPropertyOffset; they are stable in the current
+    // UE 4.27 build and come from the SDK dump.
+    constexpr uintptr_t OPC_MetaResources = 0x48; // TArray<MetaResource>
+    constexpr uintptr_t OPU_MetaResources = 0x10; // TArray<MetaResource>
+    constexpr uintptr_t MR_MetaRow        = 0x00; // FString { wchar_t*, len, max }
+    constexpr uintptr_t MR_Count          = 0x10; // int32
+    constexpr uintptr_t MR_Size           = 0x18; // sizeof(MetaResource)
 
     // ACharacter -> CharacterMovement
     inline uintptr_t Char_MovementComp = 0;
@@ -133,6 +160,19 @@ public:
     bool TimeLock = false;   // Lock time of day
     float LockedTime = 12.0f; // Default: noon (0-24)
 
+    // SurvivalCharacterState::ModifiedInternalTemperature clamp
+    bool StableTemperature = false;
+    int  StableTempValue = 20;   // degrees celsius, user configurable
+
+    // PlayerCharacterState::TotalExperience pump
+    bool MegaExp = false;
+
+    // IcarusPlayerState::ActiveCharacter::MetaResources[MetaRow] clamps
+    bool MaxTalentPoints = false;
+    bool MaxTechPoints   = false;
+    // IcarusPlayerState::ActiveUserProfile::MetaResources[MetaRow] clamp
+    bool MaxSoloPoints   = false;
+
     bool IsReady() const { return m_actorState != nullptr; }
 
     // Fast god mode - called from dedicated thread at 1ms intervals
@@ -161,6 +201,11 @@ private:
     // Resolve active UPROPERTY offsets in the Off:: namespace via
     // UObjectLookup. Called once at trainer init after UObjectLookup::Initialize.
     void ResolveAllOffsets();
+
+    // One-shot diagnostic dump printed the first time a live player is
+    // located. Lives in its own method (no SEH) because __try/__except
+    // can't coexist with the std::string objects from UObjectLookup.
+    void RunOnceDiagnostics();
 
     // GetTotalWeight patch (return 0)
     uintptr_t m_weightAddr = 0;
@@ -223,6 +268,12 @@ private:
     void** m_gworldPtr = nullptr;
     void* m_character = nullptr;
     void* m_actorState = nullptr;
+    void* m_playerState = nullptr;  // AIcarusPlayerState, reached via controller
+    void* m_expComp = nullptr;      // ExperienceComponent on the player char
+    void* m_playerTalentCtrl = nullptr;  // PlayerTalentControllerComponent instance
+    void* m_soloTalentCtrl = nullptr;    // SoloTalentControllerComponent instance
+    void* m_playerTalentModel = nullptr; // BlueprintTalentModel live instance
+    void* m_soloTalentModel = nullptr;   // SoloTalentModel live instance
     int m_retryTimer = 0;
     FILE* m_con = nullptr;
     bool m_prevFreeCraft = false;

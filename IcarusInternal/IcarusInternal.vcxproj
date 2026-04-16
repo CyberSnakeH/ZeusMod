@@ -49,11 +49,13 @@ copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\..\IcarusInjector\bin\Releas
     <ClInclude Include="Overlay.h" />
     <ClInclude Include="Render.h" />
     <ClInclude Include="UObjectLookup.h" />
+    <ClInclude Include="Logger.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="UObjectLookup.cpp" />
     <ClCompile Include="Render.cpp" />
+    <ClCompile Include="Logger.cpp" />
     <ClCompile Include="libs\minhook\src\buffer.c">
       <CompileAs>CompileAsC</CompileAs>
     </ClCompile>
