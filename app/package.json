@@ -1,8 +1,8 @@
 {
   "name": "zeusmod",
-  "version": "1.4.11",
+  "version": "1.5.0",
   "description": "ZeusMod desktop launcher and updater for Icarus",
-  "main": "main.js",
+  "main": "src/main/main.js",
   "author": "CyberSnake",
   "license": "MIT",
   "scripts": {
@@ -11,7 +11,8 @@
     "dist": "electron-builder --win nsis --publish never"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "koffi": "^2.16.1"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -53,23 +54,13 @@
       }
     ],
     "files": [
-      "main.js",
-      "preload.js",
       "src/**/*",
-      "scripts/**/*",
       "bin/**/*"
     ],
     "extraResources": [
       {
         "from": "bin/",
         "to": "bin/",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "scripts/",
-        "to": "scripts/",
         "filter": [
           "**/*"
         ]

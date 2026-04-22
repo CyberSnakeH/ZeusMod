@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}</ProjectGuid>
+    <RootNamespace>IcarusInternal</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(MSBuildProjectDirectory)\bin\Release\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\obj\Release\</IntDir>
+    <TargetExt>.dll</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <PreprocessorDefinitions>NDEBUG;_USRDLL;WIN32_LEAN_AND_MEAN;_WINDLL;_UNICODE;UNICODE</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <Optimization>Full</Optimization>
+      <AdditionalIncludeDirectories>src;src\core;src\game;src\hooks;src\ui;src\cheats;src\util;..\third_party\imgui;..\third_party\minhook\include;..\third_party\minhook\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>psapi.lib;gdi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <PostBuildEvent>
+      <Command>if not exist "$(MSBuildProjectDirectory)\..\injector\bin\Release" mkdir "$(MSBuildProjectDirectory)\..\injector\bin\Release"
+copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\..\injector\bin\Release\$(TargetFileName)"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="src\game\UE4.h" />
+    <ClInclude Include="src\game\SDK.h" />
+    <ClInclude Include="src\game\UObjectLookup.h" />
+    <ClInclude Include="src\cheats\Trainer.h" />
+    <ClInclude Include="src\cheats\TrainerInternal.h" />
+    <ClInclude Include="src\ui\Overlay.h" />
+    <ClInclude Include="src\hooks\Render.h" />
+    <ClInclude Include="src\util\Logger.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\core\dllmain.cpp" />
+    <ClCompile Include="src\game\UObjectLookup.cpp" />
+    <ClCompile Include="src\hooks\Render.cpp" />
+    <ClCompile Include="src\util\Logger.cpp" />
+    <ClCompile Include="src\cheats\Trainer.cpp" />
+    <ClCompile Include="src\cheats\TrainerResolve.cpp" />
+    <ClCompile Include="src\cheats\TrainerDiagnostics.cpp" />
+    <ClCompile Include="src\cheats\TrainerFreeCraft.cpp" />
+    <ClCompile Include="src\cheats\TrainerGiveItem.cpp" />
+    <ClCompile Include="src\ui\Overlay.cpp" />
+    <ClCompile Include="..\third_party\minhook\src\buffer.c">
+      <CompileAs>CompileAsC</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\third_party\minhook\src\hook.c">
+      <CompileAs>CompileAsC</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\third_party\minhook\src\hde\hde32.c">
+      <CompileAs>CompileAsC</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\third_party\minhook\src\hde\hde64.c">
+      <CompileAs>CompileAsC</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\third_party\minhook\src\trampoline.c">
+      <CompileAs>CompileAsC</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\third_party\imgui\imgui.cpp" />
+    <ClCompile Include="..\third_party\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\third_party\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\third_party\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\third_party\imgui\imgui_impl_dx11.cpp" />
+    <ClCompile Include="..\third_party\imgui\imgui_impl_win32.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

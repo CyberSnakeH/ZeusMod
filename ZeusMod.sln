@@ -1,0 +1,34 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Shared", "native\shared\Shared.vcxproj", "{88888888-8888-8888-8888-888888888888}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IcarusInjector", "native\injector\IcarusInjector.vcxproj", "{DC8729C8-1E75-4165-B8D9-6EC8FEF4A2AB}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IcarusInternal", "native\internal\IcarusInternal.vcxproj", "{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{88888888-8888-8888-8888-888888888888}.Debug|x64.ActiveCfg = Debug|x64
+		{88888888-8888-8888-8888-888888888888}.Debug|x64.Build.0 = Debug|x64
+		{88888888-8888-8888-8888-888888888888}.Release|x64.ActiveCfg = Release|x64
+		{88888888-8888-8888-8888-888888888888}.Release|x64.Build.0 = Release|x64
+		{DC8729C8-1E75-4165-B8D9-6EC8FEF4A2AB}.Debug|x64.ActiveCfg = Debug|x64
+		{DC8729C8-1E75-4165-B8D9-6EC8FEF4A2AB}.Debug|x64.Build.0 = Debug|x64
+		{DC8729C8-1E75-4165-B8D9-6EC8FEF4A2AB}.Release|x64.ActiveCfg = Release|x64
+		{DC8729C8-1E75-4165-B8D9-6EC8FEF4A2AB}.Release|x64.Build.0 = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Debug|x64.ActiveCfg = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Debug|x64.Build.0 = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Release|x64.ActiveCfg = Release|x64
+		{A1A2A3A4-BBBB-CCCC-DDDD-EEEEEEEE1111}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Build / install help
+    url: https://github.com/CyberSnakeH/ZeusMod/blob/main/docs/BUILD.md
+    about: Native solution + Electron app build steps.
+  - name: Architecture overview
+    url: https://github.com/CyberSnakeH/ZeusMod/blob/main/docs/ARCHITECTURE.md
+    about: How the four ZeusMod components fit together.
+  - name: Debug client reference
+    url: https://github.com/CyberSnakeH/ZeusMod/blob/main/docs/INSPECT.md
+    about: Full command catalog for scripts/inspect.py.

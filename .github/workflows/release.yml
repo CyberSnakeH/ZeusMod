@@ -23,13 +23,13 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Build IcarusInjector
-        run: msbuild IcarusInjector/IcarusInjector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
+        run: msbuild native/injector/IcarusInjector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
 
       - name: Fetch native dependencies (ImGui + MinHook)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $libs = "IcarusInternal/libs"
+          $libs = "native/third_party"
           New-Item -ItemType Directory -Force -Path "$libs/imgui"   | Out-Null
           New-Item -ItemType Directory -Force -Path "$libs/minhook" | Out-Null
 
@@ -81,7 +81,7 @@ jobs:
           Get-ChildItem "$libs/minhook" -Recurse | Select-Object FullName | Format-Table
 
       - name: Build IcarusInternal
-        run: msbuild IcarusInternal/IcarusInternal.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
+        run: msbuild native/internal/IcarusInternal.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -103,8 +103,8 @@ jobs:
           Remove-Item "app\bin\*" -Force -ErrorAction SilentlyContinue
 
           # Copy the exact maintained native outputs into the Electron bundle.
-          Copy-Item "IcarusInjector/bin/Release/IcarusInjector.exe" "app/bin/IcarusInjector.exe"
-          Copy-Item "IcarusInternal/bin/Release/IcarusInternal.dll" "app/bin/IcarusInternal.dll"
+          Copy-Item "native/injector/bin/Release/IcarusInjector.exe" "app/bin/IcarusInjector.exe"
+          Copy-Item "native/internal/bin/Release/IcarusInternal.dll" "app/bin/IcarusInternal.dll"
 
           # Standalone native package
           Copy-Item "app/bin/IcarusInjector.exe" "release/"
