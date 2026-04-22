@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeusMod</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TITLEBAR
+         ═══════════════════════════════════════════════════════════════ -->
+    <header class="titlebar">
+        <div class="titlebar-brand">
+            <svg class="titlebar-logo" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" fill="currentColor" stroke="currentColor"/>
+            </svg>
+            <div class="titlebar-text">
+                <span class="titlebar-name">ZeusMod</span>
+                <span class="titlebar-tag" id="app-version">v1.0.0</span>
+            </div>
+            <span class="titlebar-divider"></span>
+            <span class="titlebar-subtitle">Icarus trainer</span>
+        </div>
+        <div class="titlebar-ctrls">
+            <button class="wnd-btn" id="btn-min" title="Minimize"><svg viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.2"/></svg></button>
+            <button class="wnd-btn" id="btn-max" title="Maximize"><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+            <button class="wnd-btn wnd-close" id="btn-close" title="Close"><svg viewBox="0 0 12 12"><line x1="2.5" y1="2.5" x2="9.5" y2="9.5" stroke="currentColor" stroke-width="1.3"/><line x1="9.5" y1="2.5" x2="2.5" y2="9.5" stroke="currentColor" stroke-width="1.3"/></svg></button>
+        </div>
+    </header>
+
+    <div class="shell">
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SIDEBAR  (navigation by cheat category)
+             ═══════════════════════════════════════════════════════════ -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="game-tile">
+                    <div class="game-tile-art"></div>
+                    <div class="game-tile-info">
+                        <div class="game-tile-name">Icarus</div>
+                        <div class="game-tile-meta" id="game-tile-meta">RocketWerkz · Survival</div>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-cat="survival">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    <span>Survival</span>
+                </button>
+                <button class="nav-item" data-cat="inventory">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-4V5a3 3 0 0 0-3-3h-2a3 3 0 0 0-3 3v2H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM10 5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2h-4z"/></svg>
+                    <span>Inventory</span>
+                </button>
+                <button class="nav-item" data-cat="character">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5 22v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/></svg>
+                    <span>Character</span>
+                </button>
+                <button class="nav-item" data-cat="world">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+                    <span>World</span>
+                </button>
+                <button class="nav-item" data-cat="progression">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-8"/></svg>
+                    <span>Progression</span>
+                </button>
+                <button class="nav-item" data-cat="give">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/></svg>
+                    <span>Give Items</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="footer-row">
+                    <span class="footer-label">Status</span>
+                    <span class="footer-chip" id="footer-status">Checking…</span>
+                </div>
+                <div class="footer-row">
+                    <span class="footer-label">Updates</span>
+                    <span class="footer-chip" id="update-chip">—</span>
+                </div>
+                <button class="footer-update-btn" id="btn-check-updates">Check for Updates</button>
+                <div class="sidebar-credit">
+                    Made by <a href="#" id="credit-link" tabindex="-1">CyberSnake</a>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             MAIN CONTENT
+             ═══════════════════════════════════════════════════════════ -->
+        <main class="content">
+
+            <!-- Top-of-content status strip -->
+            <section class="status-strip">
+                <div class="status-left">
+                    <span class="status-dot" id="status-dot"></span>
+                    <div>
+                        <div class="status-primary" id="status-text">Checking game status…</div>
+                        <div class="status-secondary" id="install-path">Looking for your Steam install…</div>
+                    </div>
+                </div>
+                <button class="attach-btn" id="btn-play">
+                    <svg class="attach-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"/></svg>
+                    <span class="attach-label">ATTACH TO ICARUS</span>
+                </button>
+            </section>
+
+            <!-- ─── Survival category ─── -->
+            <section class="cat-panel active" data-panel="survival">
+                <div class="cat-head">
+                    <h2>Survival</h2>
+                    <p>Keep your character alive and unshaken by biome hostility.</p>
+                </div>
+                <div class="card-grid">
+                    <!-- God Mode -->
+                    <article class="cheat-card" data-cheat-card="god">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-shield"></span>
+                            <div class="cheat-title">
+                                <h3>God Mode</h3>
+                                <span class="cheat-sub">Invulnerability · debuff immunity</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="godmode"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Keeps health stable and neutralises every incoming damage source.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="stamina">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-bolt"></span>
+                            <div class="cheat-title">
+                                <h3>Infinite Stamina</h3>
+                                <span class="cheat-sub">No sprint drain</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="stamina"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Removes stamina drain from sprinting, swinging and jumping.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="armor">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-mesh"></span>
+                            <div class="cheat-title">
+                                <h3>Infinite Armor</h3>
+                                <span class="cheat-sub">Continuous repair</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="armor"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Tops up armor each tick so every hit lands on a full pool.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="oxygen">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-oxygen"></span>
+                            <div class="cheat-title">
+                                <h3>Infinite Oxygen</h3>
+                                <span class="cheat-sub">Breathe anywhere</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="oxygen"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Freezes oxygen consumption — dive, tunnel, explore without timers.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="food">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-food"></span>
+                            <div class="cheat-title">
+                                <h3>Infinite Food</h3>
+                                <span class="cheat-sub">No hunger drain</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="food"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Hunger bar is pinned at full each frame — eating is optional.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="water">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-drop"></span>
+                            <div class="cheat-title">
+                                <h3>Infinite Water</h3>
+                                <span class="cheat-sub">Hydration locked</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="water"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Thirst bar never drops — works even inside arid biomes.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="temp">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-temp"></span>
+                            <div class="cheat-title">
+                                <h3>Stable Temperature</h3>
+                                <span class="cheat-sub">Ignore biome heat & cold</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="temp"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Holds body temperature at a safe value regardless of biome.</p>
+                    </article>
+                </div>
+            </section>
+
+            <!-- ─── Inventory category ─── -->
+            <section class="cat-panel" data-panel="inventory" hidden>
+                <div class="cat-head">
+                    <h2>Inventory</h2>
+                    <p>Tools, weapons, backpack weight — always ready to play.</p>
+                </div>
+                <div class="card-grid">
+                    <article class="cheat-card" data-cheat-card="craft">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-hammer"></span>
+                            <div class="cheat-title">
+                                <h3>Free Craft</h3>
+                                <span class="cheat-sub">Zero-resource crafting</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="craft"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Bypasses inventory requirements and recipe ingredient checks. Output lands in the matching bag (player or station).</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="items">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-box"></span>
+                            <div class="cheat-title">
+                                <h3>Infinite Items</h3>
+                                <span class="cheat-sub">No consumption · max durability</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="items"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Stops consumables from decrementing and pins every tool / armor piece to its learned max durability.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="weight">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-scale"></span>
+                            <div class="cheat-title">
+                                <h3>No Weight</h3>
+                                <span class="cheat-sub">Bypass Overburdened at the source</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="weight"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Hooks <code>AddModifierState</code> so the Overburdened modifier is never applied — UI at 0, full sprint, no anim penalty.</p>
+                    </article>
+                </div>
+            </section>
+
+            <!-- ─── Character category ─── -->
+            <section class="cat-panel" data-panel="character" hidden>
+                <div class="cat-head">
+                    <h2>Character</h2>
+                    <p>Mobility and progression overrides.</p>
+                </div>
+                <div class="card-grid">
+                    <article class="cheat-card cheat-card-wide" data-cheat-card="speed">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-sprint"></span>
+                            <div class="cheat-title">
+                                <h3>Speed Hack</h3>
+                                <span class="cheat-sub" id="speed-subtitle">Current: x2.0</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="speed"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Multiplies movement speed — walk, swim, fly. Applies on every tick so biome debuffs can't drag you down.</p>
+                        <div class="cheat-control">
+                            <button class="step-btn" id="speed-down">−</button>
+                            <div class="step-value" id="speed-value">x2.0</div>
+                            <button class="step-btn" id="speed-up">+</button>
+                        </div>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="megaexp">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-star"></span>
+                            <div class="cheat-title">
+                                <h3>Mega XP</h3>
+                                <span class="cheat-sub">×100 experience gain</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="megaexp"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Multiplies every experience award so leveling feels instant.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="talent">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-tree"></span>
+                            <div class="cheat-title">
+                                <h3>Max Talent Points</h3>
+                                <span class="cheat-sub">Per-prospect talent cap</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="talent"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Fills the prospect talent pool — every talent node becomes available.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="tech">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-atom"></span>
+                            <div class="cheat-title">
+                                <h3>Max Tech Points</h3>
+                                <span class="cheat-sub">Meta tech cap</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="tech"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Unlocks every tier in the meta tech tree.</p>
+                    </article>
+
+                    <article class="cheat-card" data-cheat-card="solo">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-user"></span>
+                            <div class="cheat-title">
+                                <h3>Max Solo Points</h3>
+                                <span class="cheat-sub">Solo-play talents</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="solo"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Caps solo talent pool — unlocks every solo-play perk.</p>
+                    </article>
+                </div>
+            </section>
+
+            <!-- ─── World category ─── -->
+            <section class="cat-panel" data-panel="world" hidden>
+                <div class="cat-head">
+                    <h2>World</h2>
+                    <p>Bend the world to your schedule.</p>
+                </div>
+                <div class="card-grid">
+                    <article class="cheat-card cheat-card-wide" data-cheat-card="time">
+                        <header class="cheat-head">
+                            <span class="cheat-glyph glyph-clock"></span>
+                            <div class="cheat-title">
+                                <h3>Lock Time</h3>
+                                <span class="cheat-sub" id="time-subtitle">Pinned at 12:00</span>
+                            </div>
+                            <label class="toggle"><input type="checkbox" data-cheat-toggle="time"><span class="toggle-slider"></span></label>
+                        </header>
+                        <p class="cheat-desc">Freezes the in-game clock at a preset time of day.</p>
+                        <div class="cheat-control">
+                            <button class="step-btn" id="time-prev">◀</button>
+                            <div class="step-value" id="time-value">12:00</div>
+                            <button class="step-btn" id="time-next">▶</button>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- ─── Progression placeholder (mirrors character cat) ─── -->
+            <section class="cat-panel" data-panel="progression" hidden>
+                <div class="cat-head">
+                    <h2>Progression</h2>
+                    <p>All your character-level progression toggles in one place.</p>
+                </div>
+                <div class="card-grid"><!-- populated at runtime by mirroring character cat --></div>
+            </section>
+
+            <!-- ─── Give items placeholder ─── -->
+            <section class="cat-panel" data-panel="give" hidden>
+                <div class="cat-head">
+                    <h2>Give Items</h2>
+                    <p>Spawn any item into your backpack. Pipeline: <code>MakeItemTemplate → CreateItem → OnServer_AddItem</code>.</p>
+                </div>
+                <div class="give-shell">
+                    <div class="give-controls">
+                        <input type="text" class="give-search" id="give-search" placeholder="Search 3 054 items…">
+                        <div class="give-qty">
+                            <label>Count</label>
+                            <input type="number" id="give-count" min="1" max="999" value="10">
+                        </div>
+                    </div>
+                    <div class="give-list" id="give-list">
+                        <div class="give-hint">Attach to Icarus first — the item library is built from the game's D_ItemTemplate at boot.</div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         UPDATE MODAL
+         ═══════════════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="update-modal" style="display:none;">
+        <div class="modal">
+            <div class="modal-head">
+                <h2>Update available</h2>
+                <span class="modal-version" id="update-version">—</span>
+            </div>
+            <pre class="modal-notes" id="update-notes"></pre>
+            <div class="modal-progress" id="update-progress"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" id="update-open-page">View release</button>
+                <button class="btn-secondary" id="update-later">Later</button>
+                <button class="btn-primary" id="update-download">Download & Install</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

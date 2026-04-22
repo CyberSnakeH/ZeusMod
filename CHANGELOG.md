@@ -4,6 +4,74 @@ All notable changes to ZeusMod are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-22
+
+### Highlights
+
+- **Native in-process injector** — the Electron app now injects
+  `IcarusInternal.dll` directly via a **koffi** FFI binding
+  (`OpenProcess` → `VirtualAllocEx` → `WriteProcessMemory` →
+  `CreateRemoteThread` → `LoadLibraryW`). The `inject.ps1` PowerShell
+  fallback and its `Add-Type` JIT cost are gone. Typical end-to-end
+  inject latency dropped from ~1 s to **50–150 ms**, and the flow no
+  longer spawns a child process (fewer AV false-positives).
+- **No Weight fixed at the source** — ZeusMod now detours
+  `IcarusFunctionLibrary::AddModifierState` via MinHook. When the
+  incoming row is `Overburdened` and No Weight is ON, the call is
+  **refused** — the modifier is never applied, so the character no
+  longer feels heavy even when the UI reads 0 kg. The previous
+  patches (MaxWalkSpeed clamp, ExpireOverburdenedModifier) that
+  caused the PhysX tick access-violation have been rolled back.
+- **Redesigned desktop UI** — sidebar-driven category nav
+  (Survival · Inventory · Character · World · Progression · Give
+  Items), a live status strip with an animated connection dot, hero
+  attach button with state transitions, and a cyan/purple gradient
+  theme. The update modal has been rebuilt with a glass backdrop and
+  release-note viewer. All IPC round-trips still go through
+  `window.zeusmod.*` in `preload.js`.
+- **Phase B scanner (x64dbg-tier)** — `IcarusInternal.dll` gains
+  `memmap`, `modules`, `strings`, `refs`, `search` commands on the
+  debug pipe. Paired with `scripts/inspect.py`, ZeusMod now ships a
+  full memory explorer (module list, VirtualQuery walker, ASCII +
+  UTF-16 string scan, pointer back-reference scan, typed value
+  search).
+
+### Added — `scripts/inspect.py` (rewrite)
+
+- Graceful `rich` + `capstone` fallback — script still runs on a
+  vanilla Python 3.9+ install.
+- **Typed readers** — `readf32`, `readf64`, `readi32`, `readi64`,
+  `readstr`, `readunicode`, `readguid`, `readptrarr`.
+- **Labels** (persistent via `~/.zeusmod_labels.json`) — annotated on
+  the hex-dump grid.
+- **Bookmarks** (persistent) with optional description.
+- **Snapshots** — `snapshot`, `snapshots`, `diff <name>` capture a
+  region and show byte-level deltas.
+- **Struct viewer** — `struct <UClass> <base>` decodes UE
+  `UPROPERTY` offsets with `f32`/pointer hints.
+- **Disassembly** — `disasm <addr> <n>` via capstone, when installed.
+- **REPL** — `readline`-backed history (`~/.zeusmod_history`), tab
+  completion, `help` system with per-command detail and examples.
+- **Batch / watch / JSON** — `-c`, `--watch`, `--json`, `--timing`
+  CLI flags for scripting and diffed monitoring.
+
+### Added — Repository hygiene
+
+- Release/version badge moved to **1.5.0** on the README.
+- `docs/INSPECT.md` — full Python-client command reference.
+- GitHub issue templates (bug report, feature request) and PR
+  template under `.github/`.
+
+### Removed
+
+- `app/scripts/inject.ps1` — replaced by the koffi FFI injector.
+- PowerShell spawn from the `game:inject` IPC handler.
+
+### Migration note
+
+- Existing 1.4.11 installs will auto-update to 1.5.0 through
+  `electron-updater` exactly as 1.4.11 demonstrated end-to-end.
+
 ## [1.4.11] - 2026-04-17
 
 ### Highlights

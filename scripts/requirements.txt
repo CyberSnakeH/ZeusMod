@@ -1,0 +1,11 @@
+# Optional polish for `scripts/inspect.py`. None of these are strictly
+# required — the script falls back to plain ANSI output when they're
+# absent and still runs on a vanilla Python 3.9+ install.
+#
+#   rich         Pretty tables, syntax-highlighted output. Only imported
+#                if available; ANSI escapes are used otherwise.
+#   pyreadline3  Tab-completion + history on Windows cmd / PowerShell
+#                (stdlib's `readline` isn't shipped on Windows).
+
+rich>=13.0
+pyreadline3>=3.4; sys_platform == "win32"

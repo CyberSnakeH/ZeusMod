@@ -14,36 +14,26 @@ x64/
 *.log
 *.user
 
-# Tools & temp
-tools/
-dumps/
-offsets.json
-offsets.json.bak
+# Archives and packaged artifacts
 *.zip
 *.pak
+
+# Runtime / dump files
 *_temp/
 data_extracted/
 data_original/
+offsets.json
+offsets.json.bak
 
-# ImGui/MinHook libs (downloaded, not source)
-IcarusInternal/libs/
-IcarusInternal/minhook*/
-IcarusInternal/imgui*/
-
-# Old code
-IcarusTrainer/
-IcarusInjector/ExternalTrainer.*
-IcarusInjector/HotkeyManager.*
-IcarusInjector/Render.*
+# Third-party native deps (fetched by CI into native/third_party/)
+native/third_party/
 
 # Electron
 app/node_modules/
 app/dist/
 app/bin/
-release/
-NotUsed/
 
-# IDE
+# IDE / tooling caches
 .vs/
 *.suo
 *.sdf
@@ -51,5 +41,16 @@ NotUsed/
 *.cachefile
 ipch/
 
-# UE4SS
-ue4ss/
+# Local agent / editor session data
+.claude/
+.cursor/
+
+# Python tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local debug client persistence
+.zeusmod_history
+.zeusmod_labels.json
