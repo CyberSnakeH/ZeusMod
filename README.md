@@ -11,6 +11,7 @@
   <a href="#screenshots">Screenshots</a> ·
   <a href="#install">Install</a> ·
   <a href="#usage">Usage</a> ·
+  <a href="docs/wiki/Home.md"><strong>📖 Wiki</strong></a> ·
   <a href="docs/INSPECT.md">Debug client</a> ·
   <a href="docs/BUILD.md">Build</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
