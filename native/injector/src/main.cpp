@@ -50,7 +50,7 @@ static void DoAttach() {
     }
 
     if (g_useManualMap) {
-        ManualMap::MapStats stats{};
+        MapStats stats{};
         auto result = ManualMap::Map(g_gamePid, dllPath, &stats);
         if (result == MapResult::Success) {
             wsprintfW(buf,
