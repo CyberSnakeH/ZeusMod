@@ -72,6 +72,7 @@
   <ItemGroup>
     <ClInclude Include="src\ui\GUI.h" />
     <ClInclude Include="src\core\Injector.h" />
+    <ClInclude Include="src\core\ManualMap.h" />
     <ClInclude Include="src\core\ProcessUtils.h" />
     <ClInclude Include="resources\resource.h" />
   </ItemGroup>
@@ -82,6 +83,7 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ui\GUI.cpp" />
     <ClCompile Include="src\core\Injector.cpp" />
+    <ClCompile Include="src\core\ManualMap.cpp" />
     <ClCompile Include="src\core\ProcessUtils.cpp" />
   </ItemGroup>
   <ItemGroup>

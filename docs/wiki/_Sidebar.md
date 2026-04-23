@@ -17,6 +17,7 @@
 - [🔭 Reflection Internals](Reflection-Internals.md)
 - [📐 Memory Layout](Memory-Layout.md)
 - [📡 Pipe Protocol](Pipe-Protocol.md)
+- [🧬 Manual Mapping](Manual-Mapping.md)
 
 **Contributing**
 - [🏗️ Build From Source](Build-From-Source.md)
