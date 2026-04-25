@@ -110,13 +110,14 @@ Full command catalog: [`docs/INSPECT.md`](docs/INSPECT.md).
 ## Demo
 
 <p align="center">
-  <video src="https://github.com/CyberSnakeH/ZeusMod/releases/download/v1.5.1/TestVideo.mp4"
-         poster="docs/assets/TestVideo-poster.jpg"
-         controls muted playsinline width="720">
-    Your browser does not support inline video — <a href="https://github.com/CyberSnakeH/ZeusMod/releases/download/v1.5.1/TestVideo.mp4">watch the clip</a>.
-  </video>
+  <a href="https://youtu.be/Bi5PJuLMuwU">
+    <img src="https://img.youtube.com/vi/Bi5PJuLMuwU/maxresdefault.jpg"
+         alt="Click to watch the ZeusMod 1.5.1 demo on YouTube"
+         width="720">
+  </a>
   <br/>
-  <em>1.5.1 in action — DX12 overlay, freecraft + placement, multiplayer mirror, animated cards.</em>
+  <em>1.5.1 in action — DX12 overlay, freecraft + placement, multiplayer mirror, animated cards.<br/>
+  ▶ <a href="https://youtu.be/Bi5PJuLMuwU">Watch on YouTube</a></em>
 </p>
 
 ## Screenshots
