@@ -47,6 +47,7 @@ foreach ($f in $imguiCore) {
 
 $imguiBackends = @(
     'imgui_impl_dx11.h','imgui_impl_dx11.cpp',
+    'imgui_impl_dx12.h','imgui_impl_dx12.cpp',
     'imgui_impl_win32.h','imgui_impl_win32.cpp'
 )
 foreach ($f in $imguiBackends) {
