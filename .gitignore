@@ -33,17 +33,21 @@ app/node_modules/
 app/dist/
 app/bin/
 
-# IDE / tooling caches
+# IDE / editor caches
 .vs/
+.idea/
+.vscode/
+.cursor/
+.claude/
 *.suo
 *.sdf
 *.opensdf
 *.cachefile
 ipch/
 
-# Local agent / editor session data
-.claude/
-.cursor/
+# Local research / scratch tooling (not part of the shipped product)
+tools/
+report.txt
 
 # Python tooling
 __pycache__/

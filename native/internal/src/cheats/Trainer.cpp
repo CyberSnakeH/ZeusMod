@@ -704,6 +704,156 @@ void Trainer::FindPlayer() {
     LOG_INFO("Not found (%d scanned). Retry in 2s.", candidates);
 }
 
+// Range-check the candidate state's stat fields to confirm it's a real
+// player and not an AI/creature subclass. SEH-safe: raw int reads only,
+// no C++ unwinding required.
+static bool IsPlausiblePlayerState(void* ps) {
+    if (!ps) return false;
+    __try {
+        int hp     = Off::State_Health     ? ReadAt<int>(ps, Off::State_Health) : 0;
+        int maxHp  = Off::State_MaxHealth  ? ReadAt<int>(ps, Off::State_MaxHealth) : 0;
+        int sta    = Off::State_Stamina    ? ReadAt<int>(ps, Off::State_Stamina) : 0;
+        int maxSta = Off::State_MaxStamina ? ReadAt<int>(ps, Off::State_MaxStamina) : 0;
+        return (hp > 0 && maxHp >= 50 && maxHp <= 5000 && hp <= maxHp &&
+                sta >= 0 && maxSta >= 50 && maxSta <= 5000 && sta <= maxSta);
+    } __except (1) {
+        return false;
+    }
+}
+
+// Read UObject->ClassPrivate (offset 0x10) safely. Returns 0 on AV.
+static uintptr_t SafeReadClassPtr(void* obj) {
+    if (!obj) return 0;
+    __try {
+        return *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uint8_t*>(obj) + 0x10);
+    } __except (1) { return 0; }
+}
+
+// Scan-only helper — local std::vector is OK here because this function
+// has no __try block. Populates m_extraPlayerStates (a member, not a local).
+//
+// CRITICAL: only collect states whose UClass pointer EXACTLY matches the
+// local player's m_actorState UClass. The earlier approach used
+// `SurvivalCharacterState` + includeSubclasses=true which pulled in AI
+// and creature state subclasses. Those subclasses share the same FName
+// hierarchy but reorder/redefine fields — writing State_Health (4 bytes)
+// or State_AliveState (1 byte) into them clobbered random pointer fields,
+// producing dangling references that the parallel UE4 GC sweep
+// (TFastReferenceCollector::ProcessObjectArray) crashed on later.
+//
+// Even a HP/Stamina-range plausibility filter wasn't enough — an animal
+// can plausibly carry HP=80, MaxHP=100, Stamina=100, MaxStamina=100 and
+// pass the gate. Class-pointer equality is the only reliable signal that
+// the state is structurally identical to ours.
+void Trainer::RefreshOtherPlayerStates() {
+    m_extraPlayerStates.clear();
+
+    uintptr_t myClass = SafeReadClassPtr(m_actorState);
+    if (!myClass) return;
+
+    // Use the local player's exact class as the search key. We pass the
+    // class' object name (via reflection) to FindAllInstancesOfClass with
+    // includeSubclasses=false so we get bit-compatible peers and nothing
+    // else.
+    std::string className = UObjectLookup::GetObjectName(myClass);
+    if (className.empty() || className == "None") return;
+    auto found = UObjectLookup::FindAllInstancesOfClass(
+        className.c_str(), /*includeSubclasses=*/false);
+
+    m_extraPlayerStates.reserve(found.size());
+    for (uintptr_t p : found) {
+        void* ps = reinterpret_cast<void*>(p);
+        if (!ps || ps == m_actorState) continue;
+        // Belt-and-braces: confirm the class pointer matches and the stats
+        // are in a player range. Catches the rare case where a freed
+        // player-state slot is reallocated to an unrelated UObject of the
+        // same class between two refreshes.
+        if (SafeReadClassPtr(ps) != myClass) continue;
+        if (!IsPlausiblePlayerState(ps)) continue;
+        m_extraPlayerStates.push_back(ps);
+    }
+
+    static size_t s_lastCount = 0;
+    if (m_extraPlayerStates.size() != s_lastCount) {
+        s_lastCount = m_extraPlayerStates.size();
+        printf("[MP] mirroring cheats to %zu remote player(s) (class=%s)\n",
+            s_lastCount, className.c_str());
+    }
+}
+
+// Write-only helper — uses __try per-player to survive stale state pointers.
+// No std::vector LOCALS here (m_extraPlayerStates is a member), so SEH is OK.
+// Iteration via index rather than range-for keeps MSVC's unwind table clean.
+void Trainer::ApplyCheatsToOtherPlayers() {
+    // Refresh every 10 ticks (~300ms) instead of 60 — the original 1.8s
+    // window was wide enough for a disconnecting peer's state slot to be
+    // freed and reused by an unrelated UObject before we noticed, and
+    // writing into that reused slot caused GC heap corruption.
+    if (m_extraStatesRefreshTimer++ % 10 == 0) {
+        RefreshOtherPlayerStates();
+    }
+
+    // Cache the local player's class once — every tick we re-verify each
+    // collected state still points at an object of this exact class.
+    uintptr_t myClass = SafeReadClassPtr(m_actorState);
+    if (!myClass) return;
+
+    const size_t n = m_extraPlayerStates.size();
+    for (size_t i = 0; i < n; ++i) {
+        void* other = m_extraPlayerStates[i];
+        if (!other) continue;
+        // Hard gate: if the class pointer changed (state freed + slot
+        // reallocated to a different UObject), skip. Without this, our
+        // ints and bytes would land in the new object's fields and
+        // corrupt its layout — the original cause of the parallel-GC AV
+        // in TFastReferenceCollector::ProcessObjectArray.
+        if (SafeReadClassPtr(other) != myClass) continue;
+        __try {
+            // Defence-in-depth: re-validate the state on every tick. A state
+            // we accepted at refresh time may have been GC'd or repurposed
+            // (e.g. spectator state). Ranges match IsPlausiblePlayerState.
+            int maxHpOther = Off::State_MaxHealth
+                ? ReadAt<int>(other, Off::State_MaxHealth) : 0;
+            int hpOther    = Off::State_Health
+                ? ReadAt<int>(other, Off::State_Health) : 0;
+            if (maxHpOther < 50 || maxHpOther > 5000) continue;
+            if (hpOther <= 0 || hpOther > maxHpOther)  continue;
+
+            // GodMode mirrors per-tick HP writes onto every connected
+            // player's SurvivalCharacterState. Like the local-player path
+            // we deliberately don't NOP the global SetHealth instruction —
+            // animals must still take damage.
+            if (GodMode && Off::State_Health && Off::State_AliveState) {
+                WriteAt<int>(other, Off::State_Health, maxHpOther);
+                WriteAt<uint8_t>(other, Off::State_AliveState, 0);
+            }
+            if (InfiniteStamina && Off::State_MaxStamina && Off::State_Stamina) {
+                int v = ReadAt<int>(other, Off::State_MaxStamina);
+                WriteAt<int>(other, Off::State_Stamina, v);
+            }
+            if (InfiniteArmor && Off::State_MaxArmor && Off::State_Armor) {
+                int v = ReadAt<int>(other, Off::State_MaxArmor);
+                if (v > 0) WriteAt<int>(other, Off::State_Armor, v);
+            }
+            if (InfiniteOxygen && Off::State_MaxOxygen && Off::State_Oxygen) {
+                int v = ReadAt<int>(other, Off::State_MaxOxygen);
+                WriteAt<int>(other, Off::State_Oxygen, v);
+            }
+            if (InfiniteFood && Off::State_MaxFood && Off::State_Food) {
+                int v = ReadAt<int>(other, Off::State_MaxFood);
+                WriteAt<int>(other, Off::State_Food, v);
+            }
+            if (InfiniteWater && Off::State_MaxWater && Off::State_Water) {
+                int v = ReadAt<int>(other, Off::State_MaxWater);
+                WriteAt<int>(other, Off::State_Water, v);
+            }
+        } __except (1) {
+            // State freed / GC'd since refresh. Drops on next scan.
+        }
+    }
+}
+
 void Trainer::Tick() {
     if (!Off::State_Health || !Off::State_MaxHealth) return;
 
@@ -735,26 +885,22 @@ void Trainer::Tick() {
     // Apply cheats
     __try {
         if (GodMode && Off::State_MaxHealth && Off::State_Health && Off::State_AliveState) {
-            // Patch SetHealth write instruction with NOP
-            PatchSetHealth(true);
-            // Verify patch is still in place (game might restore it)
-            if (m_setHealthPatched && m_setHealthAddr) {
-                uint8_t check = *reinterpret_cast<uint8_t*>(m_setHealthAddr);
-                if (check != 0x90) {
-                    // Patch was undone! Re-apply
-                    LOG_PATCH("Health patch was restored by game! Re-patching...");
-                    m_setHealthPatched = false;
-                    PatchSetHealth(true);
-                }
-            }
-            // Also keep health at max
+            // Player-only god mode: rewrite this player's actor-state HP to
+            // max every tick (and keep AliveState=0). Combined with the tight
+            // GodModeThread loop in dllmain.cpp this is fast enough to outpace
+            // normal damage. We deliberately do NOT patch the global
+            // SetHealth instruction here — that would also make animals,
+            // creatures, and breakable props invincible (the user wants
+            // god-mode for players only). The patch path stays available
+            // via PatchSetHealth(true) for legacy debugging.
             int maxHp = ReadAt<int>(m_actorState, Off::State_MaxHealth);
             WriteAt<int>(m_actorState, Off::State_Health, maxHp);
             WriteAt<uint8_t>(m_actorState, Off::State_AliveState, 0);
             RemoveDebuffs();
-        } else {
-            PatchSetHealth(false);
         }
+        // Always make sure the legacy NOP is restored — protects against
+        // any prior session where it might have been left enabled.
+        if (m_setHealthPatched) PatchSetHealth(false);
 
         if (InfiniteStamina && Off::State_MaxStamina && Off::State_Stamina) {
             int maxSta = ReadAt<int>(m_actorState, Off::State_MaxStamina);
@@ -793,6 +939,20 @@ void Trainer::Tick() {
         if (InfiniteWater && Off::State_MaxWater && Off::State_Water) {
             int maxWater = ReadAt<int>(m_actorState, Off::State_MaxWater);
             WriteAt<int>(m_actorState, Off::State_Water, maxWater);
+        }
+
+        // ── Multiplayer: mirror survival cheats onto every other player's
+        // state on this server (see header for rationale). The refresh +
+        // write iteration lives in Trainer::ApplyCheatsToOtherPlayers, a
+        // helper that exists OUTSIDE the surrounding __try because
+        // std::vector operations can't coexist with SEH unwinding in MSVC.
+        // ApplyCheatsToOtherPlayers uses its own __try around each write.
+        if (ApplyToAllPlayers &&
+            (GodMode || InfiniteStamina || InfiniteArmor || InfiniteOxygen ||
+             InfiniteFood || InfiniteWater)) {
+            ApplyCheatsToOtherPlayers();
+        } else if (!ApplyToAllPlayers && !m_extraPlayerStates.empty()) {
+            m_extraPlayerStates.clear();
         }
 
         // Stable Temperature — writes BOTH InternalTemperature (raw, what
@@ -1195,6 +1355,22 @@ void Trainer::RemoveDebuffs() {
     if (!m_character || !Off::Char_BlueprintComponents ||
         !Off::Mod_Lifetime || !Off::Mod_Remaining) return;
 
+    // Cache UModifierStateComponent's UClass pointer once. The previous
+    // implementation iterated *every* BlueprintCreatedComponent on the
+    // player and wrote 0.0f to any comp whose offsets at Mod_Lifetime /
+    // Mod_Remaining held plausible "lifetime/remaining" floats. A
+    // UMaterialInstance, USkeletalMeshComponent, or any other component
+    // happens to carry floats in that range — and writing 0.0f to one of
+    // their internal fields silently corrupted the object. The render
+    // thread later picked up the corrupted MaterialInstance, dereferenced
+    // a now-null pointer at +0x84 inside SetMIParameterValueName, and
+    // crashed. Class filtering is the *only* correct guard here.
+    static uintptr_t s_modCompClass = 0;
+    if (!s_modCompClass) {
+        s_modCompClass = UObjectLookup::FindClassByName("ModifierStateComponent");
+    }
+    if (!s_modCompClass) return;  // class not yet known — bail safely
+
     __try {
         // Read BlueprintCreatedComponents TArray
         void** compData = ReadAt<void**>(m_character, Off::Char_BlueprintComponents);
@@ -1206,6 +1382,23 @@ void Trainer::RemoveDebuffs() {
             if (!comp) continue;
 
             __try {
+                // Class filter: walk the Super chain looking for an exact
+                // match against ModifierStateComponent. Subclasses (e.g.
+                // specific debuff types) inherit the same field offsets,
+                // so they're safe to write. Cap the walk at 16 levels —
+                // UE class hierarchies don't go anywhere near that deep.
+                uintptr_t cls = *reinterpret_cast<uintptr_t*>(
+                    reinterpret_cast<uint8_t*>(comp) + 0x10);
+                bool matched = false;
+                int safety = 16;
+                while (cls && safety-- > 0) {
+                    if (cls == s_modCompClass) { matched = true; break; }
+                    uintptr_t super = *reinterpret_cast<uintptr_t*>(cls + 0x40);
+                    if (!super || super == cls) break;
+                    cls = super;
+                }
+                if (!matched) continue;
+
                 float lifetime = ReadAt<float>(comp, Off::Mod_Lifetime);
                 float remaining = ReadAt<float>(comp, Off::Mod_Remaining);
 

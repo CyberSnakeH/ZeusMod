@@ -49,6 +49,10 @@ constexpr int OFF_UOBJECT_CLASS = 0x10;
 constexpr int OFF_UOBJECT_NAME  = 0x18;
 constexpr int OFF_UOBJECT_OUTER = 0x20;
 
+// UStruct: SuperStruct (parent class ptr) at +0x40. Walking this chain
+// lets us implement "X is a subclass of Y" checks.
+constexpr int OFF_USTRUCT_SUPER    = 0x40;
+
 // UStruct: Children (UField chain) at +0x48 — contains UFunctions
 constexpr int OFF_USTRUCT_CHILDREN = 0x48;
 
@@ -932,6 +936,59 @@ uintptr_t FindFunctionInClass(uintptr_t uclassAddr, const char* funcName) {
     return 0;
 }
 
+// UObject flags live at +0x08 (ObjectFlags, uint32). RF_ClassDefaultObject
+// marks the per-class archetype (CDO) — never a live instance, so we skip
+// them when scanning for "all instances of X".
+constexpr int      OFF_UOBJECT_FLAGS        = 0x08;
+constexpr uint32_t RF_ClassDefaultObject    = 0x00000010;
+constexpr uint32_t RF_ArchetypeObject       = 0x00000008;
+
+std::vector<uintptr_t> FindAllInstancesOfClass(const char* className,
+                                               bool includeSubclasses) {
+    std::vector<uintptr_t> out;
+    if (!className || !*className) return out;
+
+    const uintptr_t targetClass = FindClassByName(className);
+    if (!targetClass) return out;
+
+    const int32_t total = GetObjectCount();
+    if (total <= 0) return out;
+
+    out.reserve(16);
+    for (int32_t i = 0; i < total; ++i) {
+        uintptr_t obj = GetObjectByIndex(i);
+        if (!obj || obj == targetClass) continue;
+
+        uint32_t flags = 0;
+        if (SafeRead(obj + OFF_UOBJECT_FLAGS, flags) &&
+            (flags & (RF_ClassDefaultObject | RF_ArchetypeObject))) {
+            continue;                    // CDO / archetype, not a live instance
+        }
+
+        uintptr_t cls = 0;
+        if (!SafeRead(obj + OFF_UOBJECT_CLASS, cls) || !cls) continue;
+
+        if (cls == targetClass) {
+            out.push_back(obj);
+            continue;
+        }
+        if (!includeSubclasses) continue;
+
+        // Walk Super chain — safely bounded.
+        uintptr_t cur = cls;
+        int safety = 16;
+        bool matched = false;
+        while (cur && safety-- > 0) {
+            uintptr_t sup = 0;
+            if (!SafeRead(cur + OFF_USTRUCT_SUPER, sup) || !sup) break;
+            if (sup == targetClass) { matched = true; break; }
+            cur = sup;
+        }
+        if (matched) out.push_back(obj);
+    }
+    return out;
+}
+
 uintptr_t FindClassByName(const char* className) {
     if (!className || !*className) return 0;
     int32_t total = GetObjectCount();
@@ -1206,7 +1263,7 @@ uintptr_t FindNativeFunction(const char* className, const char* funcName) {
 //   FProperty (inherits FField)
 //     +0x4C  int32        Offset_Internal  (the byte offset we want)
 
-constexpr int OFF_USTRUCT_SUPER         = 0x40;
+// OFF_USTRUCT_SUPER already defined at file scope (line ~54).
 constexpr int OFF_USTRUCT_CHILDPROPS    = 0x50;
 constexpr int OFF_FFIELD_NEXT           = 0x20;
 constexpr int OFF_FFIELD_NAME           = 0x28;

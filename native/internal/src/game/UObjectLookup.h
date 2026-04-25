@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace UObjectLookup {
 
@@ -63,6 +64,18 @@ uintptr_t FindFunctionInClass(uintptr_t uclassAddr, const char* funcName);
 // Linear scan of GUObjectArray for a UClass with the given short name
 // (case-insensitive). Returns 0 if not found. Slow — caller should cache.
 uintptr_t FindClassByName(const char* className);
+
+// Linear scan of GUObjectArray for all *instances* (not the UClass itself)
+// whose class is `className` or derives from it when `includeSubclasses=true`.
+// Skips class default objects (CDOs). Slow — caller should cache and refresh
+// periodically rather than every tick.
+//
+// Use case: find every USurvivalCharacterState in the world so a host trainer
+// can apply survival cheats authoritatively to all players on the server,
+// not just the local one. Replication naturally propagates the writes to
+// remote clients.
+std::vector<uintptr_t> FindAllInstancesOfClass(const char* className,
+                                               bool includeSubclasses = true);
 
 // Same as FindClassByName but also matches UScriptStruct instances. Use when
 // you need to walk the ChildProperties of a C++ USTRUCT (FItemData etc.).

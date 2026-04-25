@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version"  src="https://img.shields.io/badge/version-1.5.0-6e56cf">
+  <img alt="Version"  src="https://img.shields.io/badge/version-1.5.1-6e56cf">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20x64-0a84ff">
   <img alt="Engine"   src="https://img.shields.io/badge/engine-UE%204.27-13aa52">
   <img alt="Author"   src="https://img.shields.io/badge/author-CyberSnake-00d2ff">
@@ -129,14 +129,14 @@ Full command catalog: [`docs/INSPECT.md`](docs/INSPECT.md).
 
 ### Recommended (end users)
 
-1. Grab the latest `ZeusMod-Setup-1.5.0.exe` from the
+1. Grab the latest `ZeusMod-Setup-1.5.1.exe` from the
    [Releases](https://github.com/CyberSnakeH/ZeusMod/releases) page.
 2. Run the installer (silent one-click NSIS — no UAC, no wizard).
 3. Launch **ZeusMod** from the desktop shortcut or the Start Menu.
 4. Start *Icarus*, load into a prospect, then click **Attach** in ZeusMod.
 
 The installer ships the trainer DLL and the native injector — no separate
-downloads required. Existing 1.4.11 installs will pick up 1.5.0 fully
+downloads required. Existing 1.5.0 installs will pick up 1.5.1 fully
 automatically through the in-app updater.
 
 ### Developers (build from source)

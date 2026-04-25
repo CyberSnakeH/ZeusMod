@@ -119,6 +119,94 @@ static void* FindFirstItemTemplateInstance() {
     return nullptr;
 }
 
+// Categorize an item row name so we can pick a same-shape FItemData template
+// to clone from. Each category owns a specific dyn-property type set
+// (Structure: {0,1,2,3,4,5,6,7,12}; Tool: {…,6,7,13}; Ammo: {…,8,7,10,11,12};
+// Liquid: {…,8,7,10,11}; Resource: {7}). Cloning across categories produces
+// items the game renders as broken (wrong dyn shape) — see fix in 2026-04.
+enum class ItemCategory { Generic, Structure, Tool, Ammo, Liquid, Resource };
+
+static ItemCategory CategorizeRow(const std::string& name) {
+    auto endsWith = [&](const char* suf) {
+        size_t sl = strlen(suf);
+        return name.size() >= sl && _stricmp(name.c_str() + name.size() - sl, suf) == 0;
+    };
+    auto contains = [&](const char* sub) {
+        std::string lo(name);
+        for (auto& c : lo) c = (char)tolower((unsigned char)c);
+        std::string sl(sub);
+        for (auto& c : sl) c = (char)tolower((unsigned char)c);
+        return lo.find(sl) != std::string::npos;
+    };
+    if (name.rfind("Ammo_", 0) == 0) return ItemCategory::Ammo;
+    if (endsWith("_Wall") || endsWith("_Beam") || endsWith("_Foundation") ||
+        endsWith("_Floor") || endsWith("_Door") || endsWith("_Pillar") ||
+        endsWith("_Roof") || endsWith("_Ramp") || endsWith("_Stairs") ||
+        endsWith("_Window") || endsWith("_Hatch") || endsWith("_Frame") ||
+        contains("_Trough_") || contains("_Bench_") || contains("_Bed_") ||
+        contains("_Tier_") || contains("_T1") || contains("_T2") ||
+        contains("_T3") || contains("_T4")) return ItemCategory::Structure;
+    if (endsWith("_Axe") || endsWith("_Pick") || endsWith("_Pickaxe") ||
+        endsWith("_Hammer") || endsWith("_Knife") || endsWith("_Saw") ||
+        endsWith("_Sword") || endsWith("_Spear") || endsWith("_Bow") ||
+        endsWith("_Rifle") || endsWith("_Pistol") || endsWith("_Shotgun")) return ItemCategory::Tool;
+    if (endsWith("_Bucket") || endsWith("_Jerrycan") || endsWith("_Canteen") ||
+        endsWith("_Flask") || endsWith("_Bottle")) return ItemCategory::Liquid;
+    return ItemCategory::Generic;
+}
+
+// Scan the player's bags (backpack + quickbar) for an FItemData whose dyn
+// shape matches `wantCat`. Falls back to any item with type=6 Durability
+// (skips Stone-shape resources and pure ammo) and finally to any occupied
+// slot. Returns false only if all bags are empty.
+static bool FindCategoryMatchedTemplate(uint8_t* out0x1F0, ItemCategory wantCat) {
+    constexpr size_t kItemDataSize = 0x1F0;
+    void* backpack = Trainer::Get().ResolvePlayerBackpack();
+    void* quickbar = Trainer::Get().ResolvePlayerQuickbar();
+    void* bags[] = { backpack, quickbar };
+    const uint8_t* matched = nullptr;
+    const uint8_t* fallback = nullptr;
+    const uint8_t* anyOccupied = nullptr;
+    for (void* bag : bags) {
+        if (!bag) continue;
+        uint8_t* bb = reinterpret_cast<uint8_t*>(bag);
+        void*   data = *reinterpret_cast<void**>(bb + Off::FastArray_Slots);
+        int32_t snum = *reinterpret_cast<int32_t*>(bb + Off::FastArray_Slots + 0x08);
+        if (!data || snum <= 0 || snum > 128) continue;
+        uint8_t* slots = reinterpret_cast<uint8_t*>(data);
+        for (int32_t i = 0; i < snum; ++i) {
+            uint8_t* slot = slots + i * Off::Slot_Size;
+            uint8_t* item = slot + Off::Slot_ItemData;
+            void* dt = *reinterpret_cast<void**>(item + Off::Item_StaticData);
+            if (!dt) continue;
+            if (!anyOccupied) anyOccupied = item;
+
+            std::string rowName = UObjectLookup::ReadFNameAt(
+                reinterpret_cast<uintptr_t>(item + Off::Item_StaticData + 0x08));
+            ItemCategory thisCat = CategorizeRow(rowName);
+            if (thisCat == wantCat && wantCat != ItemCategory::Generic) {
+                matched = item;
+                break;
+            }
+
+            void* dynData = *reinterpret_cast<void**>(item + Off::Item_DynamicData);
+            int32_t dynNum = *reinterpret_cast<int32_t*>(item + Off::Item_DynamicData + 0x08);
+            if (!fallback && dynData && dynNum > 0 && dynNum < 32) {
+                uint8_t* dynBuf = reinterpret_cast<uint8_t*>(dynData);
+                for (int32_t j = 0; j < dynNum; ++j) {
+                    uint8_t t = dynBuf[j * Off::Dyn_Size + Off::Dyn_PropertyType];
+                    if (t == 6) { fallback = item; break; }
+                }
+            }
+        }
+        if (matched) break;
+    }
+    const uint8_t* pick = matched ? matched : (fallback ? fallback : anyOccupied);
+    if (!pick) return false;
+    memcpy(out0x1F0, pick, kItemDataSize);
+    return true;
+}
+
 } // anonymous namespace
 
 // ============================================================================
@@ -421,53 +509,58 @@ bool Trainer_GiveItem(const char* rawName, int count) {
 
     // ── BEST PATH: clone a live valid FItemData as the template body,
     // patch RowName, and fire it into OnServer_AddItem on the player's
-    // IcarusController. This works because the game deep-copies the
-    // FItemData server-side (allocating fresh dyn data via FMemory) and
-    // validates the ItemStaticData against D_ItemsStatic.
-    //
-    // The template carrier is any currently-occupied slot in any of the
-    // player's bags — its ItemStaticData has the correct weak-obj-ptr
-    // for D_ItemsStatic and its ItemDynamicData TArray points to a real
-    // UE-heap allocation (so the operator= copy inside the RPC frees it
-    // cleanly). We only swap the 8-byte RowName at +0x20.
-    auto findTemplateFItemData = [&](uint8_t* out0x1F0) -> bool {
-        void* bags[] = { backpack, quickbar };
-        for (void* bag : bags) {
-            if (!bag) continue;
-            uint8_t* bb = reinterpret_cast<uint8_t*>(bag);
-            void*   data = *reinterpret_cast<void**>(bb + Off::FastArray_Slots);
-            int32_t snum = *reinterpret_cast<int32_t*>(bb + Off::FastArray_Slots + 0x08);
-            if (!data || snum <= 0 || snum > 128) continue;
-            uint8_t* slots = reinterpret_cast<uint8_t*>(data);
-            for (int32_t i = 0; i < snum; ++i) {
-                uint8_t* slot = slots + i * Off::Slot_Size;
-                uint8_t* item = slot + Off::Slot_ItemData;
-                void* dt = *reinterpret_cast<void**>(item + Off::Item_StaticData);
-                if (!dt) continue;    // empty slot
-                memcpy(out0x1F0, item, kItemDataSize);
-                return true;
-            }
-        }
-        return false;
-    };
+    // IcarusController. The cloned dyn TArray points at a UE-heap buffer
+    // (so the server's deep-copy + later FMemory::Free is safe) and the
+    // dyn shape MUST match the requested item's category — see the
+    // CategorizeRow / FindCategoryMatchedTemplate helpers above for the
+    // category-vs-dyn-shape table and the bug history.
+    ItemCategory wantCat = CategorizeRow(rawName);
 
     if (playerCtrl && g_fn_AddItem) {
         uint8_t templateItem[kItemDataSize];
-        bool haveTemplate = findTemplateFItemData(templateItem);
+        bool haveTemplate = FindCategoryMatchedTemplate(templateItem, wantCat);
         if (!haveTemplate) {
             LOG_INFO("[GIVE] no populated slot to use as FItemData template — bag must be empty");
         }
         // Patch RowName to target item (fname bytes already cached in g_itemLibrary).
         if (haveTemplate) {
+            int32_t templateDynNum = *reinterpret_cast<int32_t*>(
+                templateItem + Off::Item_DynamicData + 0x08);
+            std::string templateRow = UObjectLookup::ReadFNameAt(
+                reinterpret_cast<uintptr_t>(templateItem + Off::Item_StaticData + 0x08));
+            LOG_INFO("[GIVE]   want='%s' cat=%d  template='%s' dynNum=%d",
+                rawName, (int)wantCat, templateRow.c_str(), templateDynNum);
             memcpy(templateItem + Off::Item_StaticData + 0x08, entry.fname, 8);
         }
-        for (int k = 0; k < toGive && haveTemplate; ++k) {
+        if (haveTemplate) {
+            // See AddItem-stack note in Trainer_AddItemToProcessor: patch the
+            // shared dyn buffer's type=7 entry to `toGive` so a single call
+            // delivers the requested count rather than count × template_stack.
+            int32_t* stackPtr = nullptr;
+            int32_t origStack = 0;
+            void* dynData = *reinterpret_cast<void**>(templateItem + Off::Item_DynamicData);
+            int32_t dynNum = *reinterpret_cast<int32_t*>(templateItem + Off::Item_DynamicData + 0x08);
+            if (dynData && dynNum > 0 && dynNum < 32) {
+                uint8_t* dynBuf = reinterpret_cast<uint8_t*>(dynData);
+                for (int j = 0; j < dynNum; ++j) {
+                    uint8_t* dynEntry = dynBuf + j * Off::Dyn_Size;
+                    if (dynEntry[Off::Dyn_PropertyType] == 7) {
+                        stackPtr = reinterpret_cast<int32_t*>(dynEntry + Off::Dyn_Value);
+                        origStack = *stackPtr;
+                        *stackPtr = toGive;
+                        break;
+                    }
+                }
+            }
+
             uint8_t params[0x1F0]{};
             memcpy(params, templateItem, kItemDataSize);
             bool cok = UObjectLookup::CallUFunction(playerCtrl, g_fn_AddItem, params);
-            if (k == 0) LOG_INFO("[GIVE]   OnServer_AddItem(row=%s) call=%d", rawName, (int)cok);
-            if (!cok) break;
-            ++delivered;
+            LOG_INFO("[GIVE]   OnServer_AddItem(row=%s count=%d) call=%d",
+                rawName, toGive, (int)cok);
+
+            if (stackPtr) *stackPtr = origStack;
+            if (cok) delivered = toGive;
         }
         ok = (delivered > 0);
     } else if (playerCtrl && g_fn_AddItemCheat) {
@@ -476,7 +569,7 @@ bool Trainer_GiveItem(const char* rawName, int count) {
         // proved reliable in live testing, AddItemCheat sometimes returns
         // call=1 but silently discards the item.
         uint8_t templateItem[kItemDataSize];
-        bool haveTemplate = findTemplateFItemData(templateItem);
+        bool haveTemplate = FindCategoryMatchedTemplate(templateItem, wantCat);
         if (haveTemplate) {
             memcpy(templateItem + Off::Item_StaticData + 0x08, entry.fname, 8);
         }
@@ -513,8 +606,7 @@ bool Trainer_GiveItem(const char* rawName, int count) {
 // ============================================================================
 bool Trainer_AddItemToProcessor(void* procComp, const char* rawName, int count) {
     if (!procComp || !rawName || !*rawName) return false;
-    if (!g_dItemTemplate || !g_fn_MakeItemTemplate ||
-        !g_fn_CreateItem || !g_fn_ProcAddItem) {
+    if (!g_fn_ProcAddItem) {
         LOG_INFO("[GIVE-PROC] not initialized — aborting");
         return false;
     }
@@ -528,46 +620,72 @@ bool Trainer_AddItemToProcessor(void* procComp, const char* rawName, int count) 
     }
     const ItemEntry& entry = it->second;
 
-    // Build finalItem via the same MakeItemTemplate → CreateItem → D_ItemsStatic
-    // re-target pipeline Trainer_GiveItem uses.
-    char makeBuf[0x20]{};
-    memcpy(makeBuf + 0x00, entry.fname, 8);
-    if (!UObjectLookup::CallUFunction(g_dItemTemplate, g_fn_MakeItemTemplate, makeBuf)) return false;
-    uint8_t handle[0x18]; memcpy(handle, makeBuf + 0x08, 0x18);
-    if (*reinterpret_cast<void**>(handle) == nullptr) return false;
-
+    // Use the same template-clone strategy as Trainer_GiveItem. The CreateItem
+    // path used previously gave the FItemData a fresh DatabaseGUID with
+    // bIsItemInstance=true, plus a null dyn TArray — server treated each call
+    // as a unique non-stackable, producing one slot per output unit. Cloning
+    // a same-category template from the player's bag yields a stack-friendly
+    // FItemData whose dyn TArray points to a real UE-heap buffer; the server
+    // merges into existing output slots up to MaxStack.
     constexpr size_t kItemDataSize = 0x1F0;
-    uint8_t itemTemplate[kItemDataSize]{};
-    memcpy(itemTemplate + 0x18, handle, 0x18);
-
-    uint8_t createBuf[0x3E8]{};
-    memcpy(createBuf + 0x00, itemTemplate, kItemDataSize);
-    *reinterpret_cast<void**>(createBuf + 0x1F0) = g_dItemTemplate;
-    if (!UObjectLookup::CallUFunction(g_dItemTemplate, g_fn_CreateItem, createBuf)) return false;
-    uint8_t finalItem[kItemDataSize];
-    memcpy(finalItem, createBuf + 0x1F8, kItemDataSize);
-
-    if (!g_itemsStaticResolved) ResolveItemsStaticHandle();
-    if (g_itemsStaticResolved) {
-        memcpy(finalItem + 0x18 + 0x00, g_itemsStaticWeakPtr, 8);
-        memcpy(finalItem + 0x18 + 0x10, g_itemsStaticDTName,  8);
+    ItemCategory wantCat = CategorizeRow(rawName);
+    uint8_t templateItem[kItemDataSize];
+    bool haveTemplate = FindCategoryMatchedTemplate(templateItem, wantCat);
+    if (!haveTemplate) {
+        LOG_INFO("[GIVE-PROC] no template available — player bag empty?");
+        return false;
     }
-    // Null dyn TArray — game will populate it when it processes the AddItem.
-    memset(finalItem + 0x30, 0, 16);
+    // Patch RowName to the requested item.
+    memcpy(templateItem + Off::Item_StaticData + 0x08, entry.fname, 8);
 
-    int toGive = (count > 0 && count <= 999) ? count : 1;
-    int delivered = 0;
-    for (int k = 0; k < toGive; ++k) {
-        uint8_t params[kItemDataSize]{};
-        memcpy(params, finalItem, kItemDataSize);
-        bool ok = UObjectLookup::CallUFunction(procComp, g_fn_ProcAddItem, params);
-        if (k == 0) LOG_INFO("[GIVE-PROC] AddItem(proc=%p row=%s) call=%d",
-            procComp, rawName, (int)ok);
-        if (!ok) break;
-        ++delivered;
+    {
+        std::string templateRow = UObjectLookup::ReadFNameAt(
+            reinterpret_cast<uintptr_t>(templateItem + Off::Item_StaticData + 0x08));
+        int32_t templateDynNum = *reinterpret_cast<int32_t*>(
+            templateItem + Off::Item_DynamicData + 0x08);
+        LOG_INFO("[GIVE-PROC] want='%s' cat=%d template-row='%s' dynNum=%d",
+            rawName, (int)wantCat, templateRow.c_str(), templateDynNum);
     }
-    LOG_INFO("[GIVE-PROC] '%s' delivered=%d/%d", rawName, delivered, toGive);
-    return delivered > 0;
+
+    int toGive = (count > 0 && count <= 9999) ? count : 1;
+
+    // ProcessingComponent::AddItem honours the incoming dyn[type=7] stack
+    // count (unlike OnServer_AddItem which appears to clamp to 1). With the
+    // template-clone strategy the cloned dyn buffer is shared with the
+    // source slot, so its type=7 reflects the source's stack (e.g. 100 for
+    // a full ammo slot). Looping `count` times then delivers count×source
+    // — way too many. Patch the source dyn buffer's type=7 entry to
+    // `toGive` once, fire AddItem ONCE, restore. Server splits across
+    // slots if toGive > MaxStack of the target item.
+    int32_t* stackPtr = nullptr;
+    int32_t origStack = 0;
+    void* dynData = *reinterpret_cast<void**>(templateItem + Off::Item_DynamicData);
+    int32_t dynNum = *reinterpret_cast<int32_t*>(templateItem + Off::Item_DynamicData + 0x08);
+    if (dynData && dynNum > 0 && dynNum < 32) {
+        uint8_t* dynBuf = reinterpret_cast<uint8_t*>(dynData);
+        for (int j = 0; j < dynNum; ++j) {
+            uint8_t* dynEntry = dynBuf + j * Off::Dyn_Size;
+            if (dynEntry[Off::Dyn_PropertyType] == 7) {
+                stackPtr = reinterpret_cast<int32_t*>(dynEntry + Off::Dyn_Value);
+                origStack = *stackPtr;
+                *stackPtr = toGive;
+                break;
+            }
+        }
+    }
+
+    uint8_t params[kItemDataSize]{};
+    memcpy(params, templateItem, kItemDataSize);
+    bool ok = UObjectLookup::CallUFunction(procComp, g_fn_ProcAddItem, params);
+
+    // Restore the source slot's stack count so the player's bag returns to
+    // its original state. The server has already deep-copied the FItemData
+    // by this point.
+    if (stackPtr) *stackPtr = origStack;
+
+    LOG_INFO("[GIVE-PROC] AddItem(proc=%p row=%s count=%d) call=%d",
+        procComp, rawName, toGive, (int)ok);
+    return ok;
 }
 
 // Expose a simple "test" entry called once from Trainer::Initialize so we

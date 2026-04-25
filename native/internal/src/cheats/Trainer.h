@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 
 // ============================================================================
 // Raw offset reader - no struct alignment issues
@@ -181,6 +182,15 @@ public:
     bool InfiniteOxygen = false;
     bool InfiniteFood = false;
     bool InfiniteWater = false;
+    // Multiplayer: when you are hosting a listen-server session and this is
+    // enabled, the survival cheats (Stamina / Armor / Oxygen / Food / Water /
+    // Stable Temperature) are also written to every OTHER player's
+    // SurvivalCharacterState on the server. Because the host has authority,
+    // those writes replicate to the remote client naturally — otherwise a
+    // client-side cheat gets stomped by the next replication packet and never
+    // actually works. Default off so solo play is unchanged.
+    bool ApplyToAllPlayers = false;
+
     bool SpeedHack = false;
     float SpeedMultiplier = 2.0f;
     bool FreeCraft = false;  // Infinite item stacks
@@ -206,6 +216,13 @@ public:
     bool MaxSoloPoints   = false;
 
     bool IsReady() const { return m_actorState != nullptr; }
+
+    // Multiplayer host-side broadcast — split in two to keep MSVC happy:
+    // std::vector operations can't sit in the same function as a __try
+    // block, so refresh (uses local std::vector) and apply (uses __try
+    // per-write) are separate.
+    void RefreshOtherPlayerStates();
+    void ApplyCheatsToOtherPlayers();
 
     // Fast god mode - called from dedicated thread at 1ms intervals
     void TickGodModefast();
@@ -331,6 +348,12 @@ private:
     int m_retryTimer = 0;
     FILE* m_con = nullptr;
     bool m_prevFreeCraft = false;
+
+    // Cached pointers to every OTHER player's SurvivalCharacterState on the
+    // server (i.e. excluding m_actorState). Refreshed every ~1s in Tick when
+    // ApplyToAllPlayers is true, so newly-joined players are picked up.
+    std::vector<void*> m_extraPlayerStates;
+    int                m_extraStatesRefreshTimer = 0;
 
     // SetHealth write instruction patch (6 bytes NOP)
     uintptr_t m_setHealthAddr = 0;

@@ -4,6 +4,109 @@ All notable changes to ZeusMod are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-04-25
+
+### Highlights
+
+- **D3D12 backend rewrite — overlay no longer crashes on DX12 prospects.**
+  The previous D3D11On12 interop bridge produced
+  `DXGI_ERROR_DEVICE_REMOVED 0x887A002B` on most modern GPUs because
+  Icarus' command queue was being recycled mid-frame under the bridge.
+  `Render.cpp` now uses the official `imgui_impl_dx12` backend directly
+  and captures the game's live `ID3D12CommandQueue` via an
+  `ExecuteCommandLists` MinHook (with an `IDXGISwapChain3::GetDevice`
+  fallback for older driver paths). The overlay is rendered straight
+  onto the back buffer in the game's own queue — no temporary device,
+  no inter-API copies, no DEVICE_REMOVED.
+- **Menu key changed from `N` to `²`** (the key directly below `Esc`).
+  Resolved at runtime via `MapVirtualKeyW(0x29, MAPVK_VSC_TO_VK)` so it
+  picks up the right virtual-key on every keyboard layout (AZERTY,
+  QWERTZ, Dvorak, …). Previously on AZERTY the menu shared the chat
+  key, swallowing player input.
+- **FreeCraft items now stack and are placeable.** Three independent
+  bugs in the in-bag delivery path were fixed:
+  1. **Wall / beam placement** — the trainer's `findTemplateFItemData`
+     used to clone the *first occupied slot* as the new item's
+     `FItemData`. When that slot held a resource (Stone, Fiber, …) its
+     1-entry dyn array was inherited by walls and foundations,
+     producing items the server-side `DeployableComponent::Server_RequestDeploy`
+     validator silently refused. Replaced with a category-matched
+     selector (`Structure` / `Tool` / `Ammo` / `Liquid` / …) that
+     clones a same-shape template, so a freecrafted Wood_Wall inherits
+     the canonical 9-entry dyn shape `{0,1,2,3,4,5,6,7,12}`.
+  2. **"Broken" icon on placeable items** — an earlier "pick the
+     largest dyn template" heuristic had the failure mode of cloning
+     ammo (11-entry shape with `type=8/10/11` ammo-specific keys and
+     `Durability=0`). The category gate above eliminates that path.
+  3. **Workbench / Fabricator stacking** — crafting at a station no
+     longer outputs one slot per unit. `Trainer_AddItemToProcessor`
+     now patches the cloned dyn `type=7 ItemableStack` to the
+     requested count and fires `ProcessingComponent::AddItem` exactly
+     once, so 200 rounds land in 2 stacks of 100 instead of 200 stacks
+     of 1.
+- **GodMode is player-only and works across the lobby.** The
+  `PatchSetHealth` instruction-NOP that previously made every actor
+  invincible (animals included) is gone. Health is now pinned via a
+  per-tick rewrite to `m_actorState->Health = MaxHealth` plus
+  `AliveState = 0` in a tight 100-iteration thread loop. With
+  *Apply To All Players* on, the same write is mirrored onto every
+  remote `SurvivalCharacterState` whose `UClass*` matches the local
+  player's exactly — animals and AI stay killable.
+- **Stability — three crashes traced and eliminated.**
+  - `EXCEPTION_ACCESS_VIOLATION` in
+    `TFastReferenceCollector::ProcessObjectArray` (UE4 GC sweep,
+    parallel thread) was caused by writing `State_Health` /
+    `State_AliveState` into AI / creature subclasses of
+    `SurvivalCharacterState` whose layouts re-purpose those offsets
+    as pointer fields. The multiplayer mirror loop now filters by
+    UClass-pointer equality (read at `+0x10` every tick), and the
+    refresh interval was tightened from 60 ticks to 10.
+  - `EXCEPTION_ACCESS_VIOLATION` in
+    `UMaterialInstance::SetMIParameterValueName` (render thread, NULL
+    deref at `+0x84`) was caused by `RemoveDebuffs` brute-force
+    writing `0.0f` into every BlueprintCreatedComponent whose
+    offsets `Mod_Lifetime` / `Mod_Remaining` happened to contain
+    plausible floats — including MaterialInstance internals. Fixed
+    with a `UModifierStateComponent` class-pointer filter (walks the
+    Super chain at `cls + 0x40`).
+  - `RemoveDebuffs` and the multiplayer mirror loop now share a
+    single `IsPlausiblePlayerState` validator + class-pointer match,
+    so neither can leak writes into unrelated UObjects again.
+- **Overlay redesign — Electron parity.** The in-game overlay now
+  matches the launcher's typography and palette: cyan / purple
+  accent pair, navy `#0a0d14` backdrop, sidebar nav with active rail,
+  cheat cards with auto-grown height, custom toggle switches with a
+  cyan→purple gradient when on, soft drop shadows, gradient section
+  headers, and a status pill in the title bar. Cards use
+  `ImGuiChildFlags_AutoResizeY` so sliders and long descriptions are
+  never clipped.
+- **Embedded font.** Inter Medium (411 KB, SIL OFL) is now bundled
+  inside the DLL as a `constexpr unsigned char[]` blob
+  (`native/internal/src/hooks/InterFont.h`). The same face the
+  launcher uses, identical pixel-for-pixel on every Windows install.
+  Falls back to the ImGui built-in only on a load failure.
+
+### Removed
+
+- **Bypass Placement Validation toggle** and the
+  `InventoryItemLibrary::ItemDataValid` MinHook. Was a research aid
+  for the wall-placement bug above; the proper fix (category-matched
+  template clone) makes it obsolete.
+- **Dump Held Item Data button** and the matching
+  `Trainer::DumpHeldItemData()` + helpers. Same reason — diagnostic
+  scaffolding that's no longer needed in shipped builds.
+
+### Notes
+
+- DLL grew from ~1.5 MB to ~2.0 MB — the difference is the embedded
+  Inter TTF.
+- Existing 1.5.0 installs auto-update through the in-app updater.
+- Multiplayer cheats apply on the listening host only; client-side
+  toggles are silently ignored because the server-side replication
+  pass would clobber them anyway.
+
+---
+
 ## [1.5.0] - 2026-04-22
 
 ### Highlights

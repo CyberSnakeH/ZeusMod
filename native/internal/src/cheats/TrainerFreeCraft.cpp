@@ -567,7 +567,12 @@ void __fastcall HookServerActivateProcessor(void* self) {
     void* ret = _ReturnAddress();
     if (Trainer::Get().FreeCraft) {
         LogFreeCraftPath(FreeCraftPathKind::Processor, "OnServer_ActivateProcessor", ret);
-        if (s_logActivateProcessorCount++ < kMaxHookLogPerHook) {
+        // Bounded guard: explicit range check so that a corrupted /
+        // wrapped counter can't re-enable the print (signed `++ < N`
+        // is always true once counter goes negative).
+        if (s_logActivateProcessorCount >= 0 &&
+            s_logActivateProcessorCount < kMaxHookLogPerHook) {
+            ++s_logActivateProcessorCount;
             printf("[PROC] OnServer_ActivateProcessor#%d caller=+0x%llX self=%p\n",
                 s_logActivateProcessorCount, (unsigned long long)RelCaller(ret), self);
         }
