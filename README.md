@@ -110,26 +110,14 @@ Full command catalog: [`docs/INSPECT.md`](docs/INSPECT.md).
 ## Demo
 
 <p align="center">
-  <a href="https://github.com/CyberSnakeH/ZeusMod/raw/main/docs/assets/TestVideo.mp4">
-    <img src="docs/assets/TestVideo-poster.jpg" alt="ZeusMod 1.5.1 demo — click to play" width="720">
-  </a>
-  <br/>
-  <em>1.5.1 in action — DX12 overlay, freecraft + placement, multiplayer mirror, animated cards.<br/>
-  Click the thumbnail to play (or watch <a href="https://github.com/CyberSnakeH/ZeusMod/raw/main/docs/assets/TestVideo.mp4">the raw clip</a>).</em>
-</p>
-
-<details>
-  <summary>Inline player (works in browsers that allow GitHub-hosted MP4)</summary>
-
-<p align="center">
-  <video src="https://github.com/CyberSnakeH/ZeusMod/raw/main/docs/assets/TestVideo.mp4"
+  <video src="https://github.com/CyberSnakeH/ZeusMod/releases/download/v1.5.1/TestVideo.mp4"
          poster="docs/assets/TestVideo-poster.jpg"
          controls muted playsinline width="720">
-    Your browser does not support inline video.
+    Your browser does not support inline video — <a href="https://github.com/CyberSnakeH/ZeusMod/releases/download/v1.5.1/TestVideo.mp4">watch the clip</a>.
   </video>
+  <br/>
+  <em>1.5.1 in action — DX12 overlay, freecraft + placement, multiplayer mirror, animated cards.</em>
 </p>
-
-</details>
 
 ## Screenshots
 
