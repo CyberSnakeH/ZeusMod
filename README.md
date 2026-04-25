@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="#features">Features</a> ·
+  <a href="#demo">Demo</a> ·
   <a href="#screenshots">Screenshots</a> ·
   <a href="#install">Install</a> ·
   <a href="#usage">Usage</a> ·
@@ -105,6 +106,16 @@ talking to `IcarusInternal.dll` over the debug pipe.
 Full command catalog: [`docs/INSPECT.md`](docs/INSPECT.md).
 
 ---
+
+## Demo
+
+<p align="center">
+  <video src="docs/assets/TestVideo.mp4" controls muted playsinline width="720">
+    Your browser does not support inline video — <a href="docs/assets/TestVideo.mp4">download the clip</a>.
+  </video>
+  <br/>
+  <em>1.5.1 in action — DX12 overlay, freecraft + placement, multiplayer mirror, animated cards.</em>
+</p>
 
 ## Screenshots
 
